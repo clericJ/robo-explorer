@@ -4,6 +4,7 @@
 from __future__ import annotations
 from enum import Enum
 
+
 class Coordinate:
     __slots__ = ('_x', '_y')
 
@@ -34,6 +35,10 @@ class Coordinate:
     def __div__(self, other: Coordinate):
         return Coordinate(self.x / other.x, self.y / other.y)
 
+    def __repr__(self):
+        return f'Coordinate({self.x}, {self.y})'
+
+
 class Directions(Enum):
     north = Coordinate(0, -1)
     south = Coordinate(0, 1)
@@ -43,11 +48,12 @@ class Directions(Enum):
     def __repr__(self):
         return self.name
 
+
 class UnitState(Enum):
     # (id, requires_prev_direction flag)
     stand = (1, False)
     move = (2, False)
-    turn = (3, True) # при анимации необходимо знать из какого положения был поворот
+    turn = (3, True)  # при анимации необходимо знать из какого положения был поворот
 
     @property
     def requires_prev_direction(self):
@@ -55,6 +61,7 @@ class UnitState(Enum):
 
     def __repr__(self):
         return self.name
+
 
 class Event:
     def __init__(self):

@@ -2,19 +2,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import os
 import io
-from enum import Enum
-from typing import Optional, Union, List
-from core import Coordinate, Directions, Event
-import surfaces
+import os
+from typing import Optional, List
+
 import config
+import surfaces
+from core import Coordinate, Directions, Event
+
 
 class Unit:
-    moved: Event = None # destination: Directions
-    turned: Event = None # from: Directions, to: Directions
+    moved: Event = None  # destination: Directions
+    turned: Event = None  # from: Directions, to: Directions
 
-    def __init__(self, name: str, field: Field, position: Coordinate, direction: int=Directions.east):
+    def __init__(self, name: str, field: Field, position: Coordinate, direction: Directions = Directions.east):
         self.moved = Event()
         self.turned = Event()
         self._direction = direction
@@ -93,19 +94,19 @@ class Unit:
             for y in range(len(map_)):
                 for x in range(len(map_[y])):
                     if map_[y][x] == (weight - 1):
-                        if y > 0 and map_[y-1][x] == 0:
-                            map_[y-1][x] = weight
+                        if y > 0 and map_[y - 1][x] == 0:
+                            map_[y - 1][x] = weight
 
-                        if y < (len(map_)-1) and map_[y+1][x] == 0:
-                            map_[y+1][x] = weight
+                        if y < (len(map_) - 1) and map_[y + 1][x] == 0:
+                            map_[y + 1][x] = weight
 
-                        if x > 0 and map_[y][x-1] == 0:
-                            map_[y][x-1] = weight
+                        if x > 0 and map_[y][x - 1] == 0:
+                            map_[y][x - 1] = weight
 
-                        if x < (len(map_[y])-1) and map_[y][x+1] == 0:
-                            map_[y][x+1] = weight
+                        if x < (len(map_[y]) - 1) and map_[y][x + 1] == 0:
+                            map_[y][x + 1] = weight
 
-                        if (abs(y-destination.y) + abs(x-destination.x)) == 1:
+                        if (abs(y - destination.y) + abs(x - destination.x)) == 1:
                             map_[destination.y][destination.x] = weight
                             return True
         return False
@@ -116,30 +117,31 @@ class Unit:
 
         weight = map_[y][x]
         result = list(range(weight))
-        while (weight):
-            weight -=1
+        while weight:
+            weight -= 1
 
-            if y > 0 and map_[y-1][x] == weight:
+            if y > 0 and map_[y - 1][x] == weight:
                 y -= 1
                 result[weight] = Directions.south
 
-            elif y < (len(map_)-1) and map_[y+1][x] == weight:
+            elif y < (len(map_) - 1) and map_[y + 1][x] == weight:
                 result[weight] = Directions.north
                 y += 1
 
-            elif x > 0 and map_[y][x-1] == weight:
+            elif x > 0 and map_[y][x - 1] == weight:
                 result[weight] = Directions.east
                 x -= 1
 
-            elif x < (len(map_[y])-1) and map_[y][x+1] == weight:
+            elif x < (len(map_[y]) - 1) and map_[y][x + 1] == weight:
                 result[weight] = Directions.west
                 x += 1
 
         return result[1:]
 
+
 class Cell:
-    placed: Event = None # unit: Unit
-    removed: Event = None # unit: Unit
+    placed: Event = None  # unit: Unit
+    removed: Event = None  # unit: Unit
 
     def __init__(self, surface: surfaces.Surface):
         self.placed = Event()
@@ -168,7 +170,7 @@ class Cell:
 
     def remove(self) -> Unit:
         if not self.is_occupied:
-            ValueError
+            raise ValueError
 
         unit = self._bot
         self._bot = None
@@ -178,6 +180,7 @@ class Cell:
 
     def __repr__(self):
         return f'Cell({self.surface.name})'
+
 
 class Field:
 
@@ -195,14 +198,14 @@ class Field:
         return self._height
 
     def at(self, x: int, y: int) -> Optional[Cell]:
-        if (x >= 0 and x < self._width) and (y >=0 and y < self._height):
+        if (x >= 0 and x < self._width) and (y >= 0 and y < self._height):
             return self._matrix[y][x]
         return None
 
     def at_point(self, point: Coordinate) -> Cell:
         return self.at(point.x, point.y)
 
-    def load(self, stream: io.TextIOBase):
+    def load(self, stream: io.TextIO):
         lines = [l for l in stream]
 
         self._height = len(lines)
@@ -230,14 +233,14 @@ def test():
         direction_sprites = {
             Directions.south: 'v',
             Directions.north: '^',
-            Directions.east:  '>',
-            Directions.west:  '<'}
+            Directions.east: '>',
+            Directions.west: '<'}
 
         def __init__(self, unit: Unit):
-            self._bot
+            self._unit = unit
 
         def get_sprite(self):
-            return sprites[self._bot.direction]
+            return self.direction_sprites[self._unit.direction]
 
     class FieldView:
 
@@ -249,7 +252,8 @@ def test():
             return self._field
 
         def update(self):
-            QObject().thread().usleep(1000*1000*1); os.system('cls')
+            QObject().thread().usleep(1000 * 1000 * 1);
+            os.system('cls')
 
             line = []
             for y in range(self.field.height):
@@ -264,22 +268,22 @@ def test():
 
     os.system('cls')
 
-    field = Field(10,10)
+    field = Field(10, 10)
     field_view = FieldView(field)
-    #field.dump(open('maps/test.txt', 'w'))
+    # field.dump(open('maps/test.txt', 'w'))
     field.load(open('maps/test.txt', 'r'))
 
-    player = Unit('player', field, Coordinate(0,1))
+    player = Unit('player', field, Coordinate(0, 1))
     player.moved.subscribe(lambda x: print(f'moved to {x.name}'))
     player.turned.subscribe(lambda x, y: print(f'turned from {x.name} to {y.name}'))
-    path = player.get_path(Coordinate(8,5))
+    path = player.get_path(Coordinate(8, 5))
 
     field_view.update()
     if path:
         for next_step in path:
             player.move(next_step)
             field_view.update()
-            #print(next_step)
+            # print(next_step)
 
 
 if __name__ == '__main__':

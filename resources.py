@@ -6,6 +6,7 @@ from models import Directions
 from core import UnitState
 import config
 
+
 def get_tile(name: str) -> str:
     result = os.path.normpath(os.path.join(config.TILES_PATH, f'{name}.svg'))
     if not os.path.isfile(result):
@@ -15,10 +16,10 @@ def get_tile(name: str) -> str:
 
 def get_animated_sprite(name: str, state: UnitState, from_: Directions, to: Directions) -> str:
     template = (f'{state.name}_{to.name}.png' if not from_
-        else f'{state.name}_from_{from_.name}_to_{to.name}.png')
+                else f'{state.name}_from_{from_.name}_to_{to.name}.png')
 
     result = os.path.normpath(os.path.join(config.SPRITES_PATH, f'{name}',
-        'animated', template))
+                                           'animated', template))
 
     if not os.path.isfile(result):
         raise FileNotFoundError(f'resource file "{result}" not found')
@@ -50,7 +51,6 @@ def get_animated_sprite(name: str, state: UnitState, from_: Directions, to: Dire
 ##        result = None
 ##
 ##    return result
-
 
 def test():
     print(get_tile('sand-001'))

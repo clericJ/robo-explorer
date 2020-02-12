@@ -1,16 +1,18 @@
-from enum import Enum
 from typing import Optional, Tuple, Dict
-from PySide2.QtCore import QRect, QRectF, QTimer, Qt, QPoint, Signal
-from PySide2.QtWidgets import QGraphicsItem, QWidget, QStyleOptionGraphicsItem, QGraphicsObject
+
+from PySide2.QtCore import QRect, QTimer, Qt, QPoint, Signal
 from PySide2.QtGui import QPixmap, QPainter
 from PySide2.QtSvg import QSvgRenderer
-from core import Directions, UnitState
-import resources as rc
+from PySide2.QtWidgets import QGraphicsItem, QWidget, QStyleOptionGraphicsItem, QGraphicsObject
+
 import config
+import resources as rc
+from core import Directions, UnitState
+
 
 class SVGTile(QGraphicsItem):
 
-    def __init__(self, tile: str, parent: Optional[QGraphicsItem]=None):
+    def __init__(self, tile: str, parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
         self._tile = tile
 
@@ -24,10 +26,11 @@ class SVGTile(QGraphicsItem):
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
         self.renderer.render(painter, self.boundingRect())
 
+
 class Animation:
 
-    def __init__(self, sprite: QPixmap, frames_per_second: int=config.DEFAULT_ANIMATION_SPEED,
-        frame_number: int=0, size=config.DEFAULT_SQUARE_SIZE, name=''):
+    def __init__(self, sprite: QPixmap, frames_per_second: int = config.DEFAULT_ANIMATION_SPEED,
+                 frame_number: int = 0, size=config.DEFAULT_SQUARE_SIZE, name=''):
 
         self._sprite = sprite.scaledToHeight(size, mode=Qt.SmoothTransformation)
         self._frame_count = self._sprite.width() / self._sprite.height()
@@ -65,10 +68,10 @@ class Animation:
     def __repr__(self):
         return f'Animation({self._debug_name})' if self._debug_name else super().__repr__()
 
+
 class AnimationState:
     def __init__(self, animations: Dict[Tuple[Optional[Directions], Directions], Animation],
-        state: UnitState):
-
+                 state: UnitState):
         self._animations = animations
         self._state = state
 
@@ -76,17 +79,17 @@ class AnimationState:
     def state(self) -> UnitState:
         return self._state
 
-    def get_animation(self, from_: Directions, to: Directions) -> Animation:
+    def get_animation(self, from_: Optional[Directions], to: Directions) -> Animation:
         return self._animations[(from_, to)]
 
     def __repr__(self):
         return f'AnimationState({self._state})'
 
-class AnimatedSprite(QGraphicsObject):
 
+class AnimatedSprite(QGraphicsObject):
     animation_loop_ended = Signal()
 
-    def __init__(self, parent: Optional[QGraphicsItem]=None):
+    def __init__(self, parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
         self._animation_states = {}
         self._animation_timer = QTimer()
@@ -103,7 +106,7 @@ class AnimatedSprite(QGraphicsObject):
     def add_state(self, state: AnimationState):
         self._animation_states[state.state] = state
 
-    def switch_state(self, state: UnitState, from_: Directions, to: Directions):
+    def switch_state(self, state: UnitState, from_: Optional[Directions], to: Directions):
         self._current = self._animation_states[state].get_animation(from_, to)
         self._current.reset()
 
@@ -125,7 +128,7 @@ class AnimatedSprite(QGraphicsObject):
                     for from_ in other_directions:
                         animations[from_, direction] = Animation(QPixmap(
                             rc.get_animated_sprite(name, state, from_, direction)),
-                             frames_per_second, size)
+                            frames_per_second, size)
                 else:
                     animations[None, direction] = Animation(QPixmap(
                         rc.get_animated_sprite(name, state, None, direction)),
@@ -140,7 +143,7 @@ class AnimatedSprite(QGraphicsObject):
             x = ssize * self.current_animation.get_current_frame()
 
             painter.drawPixmap(QPoint(0, 0), self.current_animation.sprite,
-                QRect(x, 0, ssize, ssize))
+                               QRect(x, 0, ssize, ssize))
 
     def _update_frame(self):
         if self.current_animation:
@@ -150,7 +153,6 @@ class AnimatedSprite(QGraphicsObject):
             else:
                 self.current_animation.increment_frame()
             self.update()
-
 
 ##class AnimatedSprite(QGraphicsObject):
 ##
@@ -224,4 +226,3 @@ class AnimatedSprite(QGraphicsObject):
 ##            else:
 ##                self.current_animation.increment_frame()
 ##            self.update()
-
