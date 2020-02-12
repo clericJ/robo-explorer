@@ -1,0 +1,10 @@
+dune	sand	sand	sand	sand	sand	sand	rock	sand	sand
+sand	sand	sand	sand	sand	sand	rock	sand	dune	sand
+sand	sand	sand	sand	sand	rock	sand	dune	dune	sand
+sand	sand	sand	sand	sand	sand	sand	sand	rock	sand
+rock	sand	sand	sand	sand	rock	sand	sand	sand	sand
+sand	sand	rock	sand	sand	rock	rock	dune	sand	rock
+sand	sand	sand	sand	sand	sand	dune	rock	dune	sand
+sand	sand	sand	rock	sand	dune	dune	rock	rock	sand
+sand	rock	sand	sand	sand	dune	sand	rock	sand	sand
+sand	sand	sand	sand	sand	sand	rock	sand	sand	sand
