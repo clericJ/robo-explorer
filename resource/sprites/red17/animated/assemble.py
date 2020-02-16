@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import sys, os
-from PyQt5.QtCore import QSize, QPoint, Qt
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QPixmap, QPainter, QColor, QPen
+from PySide2.QtCore import QSize, QPoint
+from PySide2.QtWidgets import QApplication
+from PySide2.QtGui import QPixmap, QPainter, QColor
 
 
 def abs_path(directory: str) -> str:
@@ -25,8 +25,8 @@ def assemble_image(path: str) -> QPixmap:
 
     painter = QPainter()
     painter.begin(assembled_image)
-    for i, imagefile in enumerate(os.listdir(path)):
-        image = QPixmap(os.path.join(path, imagefile))
+    for i, image_file in enumerate(os.listdir(path)):
+        image = QPixmap(os.path.join(path, image_file))
         painter.drawPixmap(QPoint(image.width() * i-1 ,0), image)
 
 

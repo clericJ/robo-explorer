@@ -9,9 +9,7 @@ import config
 import resources as rc
 from core import Directions, UnitState
 
-
 class SVGTile(QGraphicsItem):
-
     def __init__(self, tile: str, parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
         self._tile = tile
@@ -26,9 +24,7 @@ class SVGTile(QGraphicsItem):
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
         self.renderer.render(painter, self.boundingRect())
 
-
 class Animation:
-
     def __init__(self, sprite: QPixmap, frames_per_second: int = config.DEFAULT_ANIMATION_SPEED,
                  frame_number: int = 0, size=config.DEFAULT_SQUARE_SIZE, name=''):
 
@@ -68,7 +64,6 @@ class Animation:
     def __repr__(self):
         return f'Animation({self._debug_name})' if self._debug_name else super().__repr__()
 
-
 class AnimationState:
     def __init__(self, animations: Dict[Tuple[Optional[Directions], Directions], Animation],
                  state: UnitState):
@@ -85,7 +80,6 @@ class AnimationState:
     def __repr__(self):
         return f'AnimationState({self._state})'
 
-
 class AnimatedSprite(QGraphicsObject):
     animation_loop_ended = Signal()
 
@@ -94,11 +88,12 @@ class AnimatedSprite(QGraphicsObject):
         self._animation_states = {}
         self._animation_timer = QTimer()
         self._animation_timer.timeout.connect(self._update_frame)
-        self._current = None
+        self._current_animation = None
+        self._current_state = None
 
     @property
     def current_animation(self) -> Optional[Animation]:
-        return self._current
+        return self._current_animation
 
     def is_running(self) -> bool:
         return self._animation_timer.isActive()
@@ -106,9 +101,13 @@ class AnimatedSprite(QGraphicsObject):
     def add_state(self, state: AnimationState):
         self._animation_states[state.state] = state
 
+    def get_state(self) -> Optional[AnimationState]:
+        return self._current_state
+
     def switch_state(self, state: UnitState, from_: Optional[Directions], to: Directions):
-        self._current = self._animation_states[state].get_animation(from_, to)
-        self._current.reset()
+        self._current_state = state
+        self._current_animation = self._animation_states[state].get_animation(from_, to)
+        self._current_animation.reset()
 
     def run_animation(self):
         if not self.is_running():

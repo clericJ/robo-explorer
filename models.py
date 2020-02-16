@@ -5,13 +5,27 @@ from __future__ import annotations
 import io
 import os
 from typing import Optional, List
+from abc import ABC, abstractproperty
 
 import config
 import surfaces
 from core import Coordinate, Directions, Event
 
+class HavingPosition(ABC):
 
-class Unit:
+    @abstractproperty
+    def position(self) -> Coordinate:
+        pass
+
+    @abstractproperty
+    def x(self) -> int:
+        pass
+
+    @abstractproperty
+    def y(self) -> int:
+        pass
+
+class Unit(HavingPosition):
     moved: Event = None  # destination: Directions
     turned: Event = None  # from: Directions, to: Directions
 
@@ -86,7 +100,7 @@ class Unit:
 
         return result
 
-    def _find_path(self, map_: List[List[int]], destination) -> bool:
+    def _find_path(self, map_: List[List[int]], destination: Coordinate) -> bool:
         weight = 1
         for i in range(len(map_) * len(map_[0])):
             weight += 1
@@ -138,15 +152,15 @@ class Unit:
 
         return result[1:]
 
-
-class Cell:
+class Cell(HavingPosition):
     placed: Event = None  # unit: Unit
     removed: Event = None  # unit: Unit
 
-    def __init__(self, surface: surfaces.Surface):
+    def __init__(self, surface: surfaces.Surface, position: Coordinate):
         self.placed = Event()
         self.removed = Event()
         self._surface = surface
+        self._position = position
         self._bot = None
 
     @property
@@ -156,6 +170,18 @@ class Cell:
     @property
     def is_occupied(self) -> bool:
         return self._bot is not None
+
+    @property
+    def x(self) -> int:
+        return self._position.x
+
+    @property
+    def y(self) -> int:
+        return self._position.y
+
+    @property
+    def position(self):
+        return self._position
 
     @property
     def unit(self) -> Optional[Unit]:
@@ -181,9 +207,7 @@ class Cell:
     def __repr__(self):
         return f'Cell({self.surface.name})'
 
-
 class Field:
-
     def __init__(self, width: int, height: int):
         self._matrix = self._create_empty_matrix(width, height)
         self._width = width
@@ -214,7 +238,7 @@ class Field:
 
         for y, line in enumerate(lines):
             for x, cell_name in enumerate(line.split(config.TAB_LITERAL)):
-                self._matrix[y][x] = Cell(surfaces.BY_NAME[cell_name.strip()])
+                self._matrix[y][x] = Cell(surfaces.BY_NAME[cell_name.strip()], Coordinate(x, y))
 
     def dump(self, stream: io.TextIOBase):
         for y in range(self.height):
@@ -222,7 +246,7 @@ class Field:
             stream.write(config.NL_LITERAL)
 
     def _create_empty_matrix(self, width: int, height: int) -> List[List]:
-        return [[Cell(surfaces.empty) for i in range(width)] for j in range(height)]
+        return [[Cell(surfaces.empty, Coordinate(i, j)) for i in range(width)] for j in range(height)]
 
 
 def test():
