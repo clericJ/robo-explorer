@@ -2,19 +2,29 @@
 # -*- coding: utf-8 -*-
 
 import os
+from typing import Optional
+
 from models import Directions
 from core import UnitState
 import config
 
 
-def get_tile(name: str) -> str:
-    result = os.path.normpath(os.path.join(config.TILES_PATH, f'{name}.svg'))
+def get_resource(path: str):
+    result = os.path.normpath(path)
     if not os.path.isfile(result):
         raise FileNotFoundError('resource file "{result}" not found')
 
     return result
 
-def get_animated_sprite(name: str, state: UnitState, from_: Directions, to: Directions) -> str:
+def get_tile(name: str) -> str:
+    return get_resource(os.path.join(config.TILES_PATH, f'{name}.svg'))
+
+def get_overlay(name: str):
+    return get_resource(os.path.join(config.OVERLAYS_PATH, f'{name}.svg'))
+
+def get_animated_sprite(name: str, state: UnitState,
+                        from_: Optional[Directions], to: Directions) -> str:
+
     template = (f'{state.name}_{to.name}.png' if not from_
                 else f'{state.name}_from_{from_.name}_to_{to.name}.png')
 

@@ -59,6 +59,11 @@ class Unit(HavingPosition):
     def direction(self) -> Directions:
         return self._direction
 
+    def turn(self, direction: Directions):
+        previous = self._direction
+        self._direction = direction
+        self.turned.notify(previous, direction)
+
     @property
     def field(self) -> Field:
         return self._field
@@ -75,9 +80,7 @@ class Unit(HavingPosition):
 
             self._position = new_position
             if self._direction != direction:
-                previous = self._direction
-                self._direction = direction
-                self.turned.notify(previous, direction)
+                self.turn(direction)
 
             self.moved.notify(direction)
             result = True

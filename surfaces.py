@@ -7,9 +7,9 @@ class Surface:
     id: int
 
 empty = Surface(True, 'empty', 1)
-sand = Surface(True, 'sand', 2)
-dune = Surface(True, 'dune', 3)
-rock = Surface(False, 'rock', 4)
+sand = Surface(True, 'sand', 1)
+dune = Surface(True, 'dune', 1)
+rock = Surface(False, 'rock', 1)
 
 ALL = (sand, dune, rock)
 BY_NAME = {empty.name: empty,

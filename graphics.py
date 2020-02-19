@@ -22,6 +22,7 @@ class SVGTile(QGraphicsItem):
         return self._tile
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+        painter.setRenderHint(painter.Antialiasing)
         self.renderer.render(painter, self.boundingRect())
 
 class Animation:
@@ -29,7 +30,7 @@ class Animation:
                  frame_number: int = 0, size=config.DEFAULT_SQUARE_SIZE, name=''):
 
         self._sprite = sprite.scaledToHeight(size, mode=Qt.SmoothTransformation)
-        self._frame_count = self._sprite.width() / self._sprite.height()
+        self._frame_count = self._sprite.width() // self._sprite.height()
         self._frames_per_second = frames_per_second
         self._current_frame = frame_number
         self._debug_name = name
@@ -111,7 +112,7 @@ class AnimatedSprite(QGraphicsObject):
 
     def run_animation(self):
         if not self.is_running():
-            self._animation_timer.start(int(1000 / self.current_animation.frames_per_second))
+            self._animation_timer.start(1000 // self.current_animation.frames_per_second)
 
     def stop_animation(self):
         if self.is_running():
@@ -137,12 +138,13 @@ class AnimatedSprite(QGraphicsObject):
             self.add_state(animation_state)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+        painter.setRenderHint(painter.Antialiasing)
         if self.current_animation:
-            ssize = self.current_animation.sprite.height()
-            x = ssize * self.current_animation.get_current_frame()
+            size = self.current_animation.sprite.height()
+            x = size * self.current_animation.get_current_frame()
 
             painter.drawPixmap(QPoint(0, 0), self.current_animation.sprite,
-                               QRect(x, 0, ssize, ssize))
+                               QRect(x, 0, size, size))
 
     def _update_frame(self):
         if self.current_animation:
