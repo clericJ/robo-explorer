@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+from enum import Enum
 from typing import Optional, List
 from abc import ABC, abstractproperty
 
@@ -25,16 +26,23 @@ class HavingPosition(ABC):
     def y(self) -> int:
         pass
 
+class Speed(Enum):
+    slow = 1
+    middle = 2
+    fast = 3
+
 class Unit(HavingPosition):
     moved: Event = None  # destination: Directions
     turned: Event = None  # from: Directions, to: Directions
 
-    def __init__(self, name: str, field: Field, position: Coordinate, direction: Directions = Directions.east):
+    def __init__(self, name: str, field: Field, position: Coordinate,
+                 speed: Speed = Speed.middle, direction: Directions = Directions.east):
         self.moved = Event()
         self.turned = Event()
         self._direction = direction
         self._position = position
         self._field = field
+        self._speed = speed
         self._name = name
 
         self.field.at_point(position).put(self)
@@ -58,6 +66,15 @@ class Unit(HavingPosition):
     @property
     def direction(self) -> Directions:
         return self._direction
+
+    @property
+    def speed(self) -> Speed:
+        return self._speed
+
+    @speed.setter
+    def speed(self, speed: Speed):
+        assert isinstance(speed, Speed)
+        self._speed = speed
 
     def turn(self, direction: Directions):
         previous = self._direction

@@ -6,7 +6,7 @@ from typing import Optional
 from PySide2.QtCore import QObject, QRectF, QPointF, QPropertyAnimation, QEventLoop, Qt, Signal, QByteArray
 from PySide2.QtGui import QPainter, QTransform, QPixmap
 from PySide2.QtWidgets import QGraphicsScene, QGraphicsItem, QGraphicsSceneMouseEvent, QGraphicsSceneHoverEvent, \
-    QStyleOptionGraphicsItem, QWidget
+    QStyleOptionGraphicsItem, QWidget, QApplication
 
 import config
 import models
@@ -27,14 +27,12 @@ class Unit(AnimatedSprite):
         self._selected = False
 
         self.setPos(model.x * size, model.y * size)
-        self.load_states(self.model.name, config.DEFAULT_ANIMATION_SPEED * 2, self._sprite_size)
+        self.load_states(self.model.name, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
         self.switch_state(UnitState.stand, None, self.model.direction)
         self.run_animation()
 
         self._moving_animation = QPropertyAnimation(self, QByteArray(bytes('pos', 'utf-8')))
-        self._moving_animation.setDuration(config.DEFAULT_MOVE_ANIMATION_SPEED / 2)
-        self._wait_loop = QEventLoop()
-        self._moving_animation.finished.connect(self._wait_loop.quit)
+        self._moving_animation.setDuration(config.DEFAULT_MOVE_ANIMATION_SPEED / model.speed.value)
 
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._sprite_size, self._sprite_size)
@@ -58,7 +56,8 @@ class Unit(AnimatedSprite):
             self.model.y * self._sprite_size))
 
         self._moving_animation.start()
-        self._wait_loop.exec_()
+        while self._moving_animation.state() == QPropertyAnimation.Running:
+            QApplication.processEvents()
 
         self.switch_state(UnitState.stand, None, direction)
 

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 from enum import Enum
+from typing import Iterable, Any, Iterator
+
 
 class Coordinate:
     __slots__ = ('_x', '_y')
@@ -78,3 +80,29 @@ class Event:
     def notify(self, *args):
         for listener in self._listeners:
             listener(*args)
+
+
+class MutableIterator(Iterable):
+    def __init__(self, path: Iterable=None):
+        self._path = path if path is not None else ()
+        self._index = 0
+
+    def set(self, path: Iterable):
+        self._path = path
+        self._index = 0
+
+    def is_empty(self) -> bool:
+        return len(self._path) == 0
+
+    def __next__(self) -> Any:
+        try:
+            item = self._path[self._index]
+        except IndexError:
+            self._path = ()
+            raise StopIteration
+
+        self._index += 1
+        return item
+
+    def __iter__(self) -> Iterator:
+        return self

@@ -5,7 +5,7 @@ from PySide2.QtCore import QObject
 
 import models
 import views
-from core import Coordinate, Directions
+from core import Coordinate, MutableIterator
 
 class Field(QObject):
     def __init__(self, model: models.Field,  parent: Optional[QObject] = None):
@@ -13,9 +13,6 @@ class Field(QObject):
         self._selected_unit = None
         self.model = model
         self.view = None
-
-        self._path = []
-        self._renew_path = False
 
     def set_view(self, view: views.Field):
         view.unit_selected.connect(self._unit_selected)
@@ -31,26 +28,34 @@ class Field(QObject):
         return self._selected_unit
 
     def _move_unit(self, position: Coordinate):
-
+        self.__dict__.setdefault('_static_path', MutableIterator())
         unit = self.get_selected()
-        second_call = bool(self._path)
-        self._path = unit.get_path(position)
 
-        if second_call:
-            self._renew_path = True
-            return
+        if path := unit.get_path(position):
+            not_empty = not self._static_path.is_empty()
+            self._static_path.set(path)
+            if not_empty:
+                return
 
-        if self._path:
-            while True:
-                for next_step in self._path:
-                    if self._renew_path:
-                        self._renew_path = False
-                        break
-                    unit.move(next_step)
-                else:
-                    break
+            for next_step in self._static_path:
+                unit.move(next_step)
 
-        self._path = []
+        # # TODO: переписать, реализовать прерывание текущего действия
+        # if second_call:
+        #     self._renew_path = True
+        #     return
+        #
+        # if self._path:
+        #     while True:
+        #         for next_step in self._path:
+        #             if self._renew_path:
+        #                 self._renew_path = False
+        #                 break
+        #             unit.move(next_step)
+        #         else:
+        #             break
+        #
+        # self._path = []
 
     def _cell_activated(self, position: Coordinate):
         if self.get_selected():
@@ -80,8 +85,7 @@ def test(argv):
             self.controller = Field(field_model, self)
             self.controller.set_view(self.field_scene)
             red17 = models.Unit('red17', self.field_scene.model,
-                                Coordinate(0, 1), direction=Directions.east)
-
+                                Coordinate(0, 1))
             self.controller.add_unit(red17)
 
             layout = QGridLayout()
