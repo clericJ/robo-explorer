@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 from enum import Enum
-from typing import Iterable, Any, Iterator
-
+from typing import Iterable, Any, Iterator, Hashable, Optional
 
 class Coordinate:
     __slots__ = ('_x', '_y')
@@ -81,24 +80,23 @@ class Event:
         for listener in self._listeners:
             listener(*args)
 
-
 class MutableIterator(Iterable):
-    def __init__(self, path: Iterable=None):
-        self._path = path if path is not None else ()
+    def __init__(self, sequence: Iterable=None):
+        self._sequence = sequence if sequence is not None else ()
         self._index = 0
 
     def set(self, path: Iterable):
-        self._path = path
+        self._sequence = path
         self._index = 0
 
     def is_empty(self) -> bool:
-        return len(self._path) == 0
+        return len(self._sequence) == 0
 
     def __next__(self) -> Any:
         try:
-            item = self._path[self._index]
+            item = self._sequence[self._index]
         except IndexError:
-            self._path = ()
+            self._sequence = ()
             raise StopIteration
 
         self._index += 1
@@ -106,3 +104,33 @@ class MutableIterator(Iterable):
 
     def __iter__(self) -> Iterator:
         return self
+
+class StateMachine:
+    switched = None # (previous: Any, next: Any)
+
+    def __init__(self):
+        self.switched = Event()
+        self._current = None
+        self._states = {}
+
+    def add(self, state: Hashable, action: Any):
+        self._states[state] = action
+
+    def remove(self, state: Hashable):
+        del self._states[state]
+
+    def switch(self, state: Hashable) -> Any:
+        previous = self.action()
+        self._current = state
+        self.switched.notify(previous, self.action())
+
+        return self._states[state]
+
+    def action(self) -> Any:
+        if self._current:
+            if self._current not in self._states:
+                raise KeyError(f'Action for state: {self._current} not found')
+            return self._states[self._current]
+
+    def state(self) -> Optional[Hashable]:
+        return self._current

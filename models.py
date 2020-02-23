@@ -34,11 +34,13 @@ class Speed(Enum):
 class Unit(HavingPosition):
     moved: Event = None  # destination: Directions
     turned: Event = None  # from: Directions, to: Directions
+    route_calculated = None # start: Coordinate, destination: Coordinate, route: Iterable
 
     def __init__(self, name: str, field: Field, position: Coordinate,
                  speed: Speed = Speed.middle, direction: Directions = Directions.east):
         self.moved = Event()
         self.turned = Event()
+        self.route_calculated = Event()
         self._direction = direction
         self._position = position
         self._field = field
@@ -110,13 +112,15 @@ class Unit(HavingPosition):
         for y in range(self.field.width):
             map_.append([])
             for x in range(self.field.height):
-                map_[y].append(0 if self.field.at(x, y).surface.passable else -1)
+                cell = self.field.at(x, y)
+                map_[y].append(0 if cell.surface.passable and not cell.unit else -1)
 
         # начальная точка маршрута
         map_[self.y][self.x] = 1
 
         if self._find_path(map_, destination):
             result = self._generate_path(map_, destination)
+            self.route_calculated.notify(self.position, destination, result)
 
         return result
 
@@ -242,7 +246,7 @@ class Field:
         return self._height
 
     def at(self, x: int, y: int) -> Optional[Cell]:
-        if (x >= 0 and x < self._width) and (y >= 0 and y < self._height):
+        if (0 <= x < self._width) and (0 <= y < self._height):
             return self._matrix[y][x]
         return None
 
@@ -296,7 +300,7 @@ def test():
             return self._field
 
         def update(self):
-            QObject().thread().usleep(1000 * 1000 * 1);
+            QObject().thread().usleep(1000 * 1000 * 1)
             os.system('cls')
 
             line = []

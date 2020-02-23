@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from typing import Optional
+from typing import Optional, Iterable
 
-from PySide2.QtCore import QObject, QRectF, QPointF, QPropertyAnimation, QEventLoop, Qt, Signal, QByteArray
+from PySide2.QtCore import QObject, QRectF, QPointF, QPropertyAnimation, Qt, Signal, QByteArray, QCoreApplication, \
+    QEventLoop
 from PySide2.QtGui import QPainter, QTransform, QPixmap
 from PySide2.QtWidgets import QGraphicsScene, QGraphicsItem, QGraphicsSceneMouseEvent, QGraphicsSceneHoverEvent, \
-    QStyleOptionGraphicsItem, QWidget, QApplication
+    QStyleOptionGraphicsItem, QWidget
 
 import config
 import models
@@ -17,22 +18,21 @@ from graphics import SVGTile, AnimatedSprite
 
 class Unit(AnimatedSprite):
 
-    def __init__(self, model: models.Unit, size=config.DEFAULT_SQUARE_SIZE,
+    def __init__(self, model: models.Unit, controller, size=config.DEFAULT_SQUARE_SIZE,
                  parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
 
         self.model = model
+        self.controller = controller
         self.model.moved.subscribe(self._move)
+        # TODO: закончить draw path
+        #self.model.route_calculated.subscribe(self.scene().draw_path)
         self._sprite_size = size
         self._selected = False
 
         self.setPos(model.x * size, model.y * size)
         self.load_states(self.model.name, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
-        self.switch_state(UnitState.stand, None, self.model.direction)
-        self.run_animation()
-
-        self._moving_animation = QPropertyAnimation(self, QByteArray(bytes('pos', 'utf-8')))
-        self._moving_animation.setDuration(config.DEFAULT_MOVE_ANIMATION_SPEED / model.speed.value)
+        self.states.switch((UnitState.stand, None, self.model.direction))
 
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._sprite_size, self._sprite_size)
@@ -48,20 +48,21 @@ class Unit(AnimatedSprite):
         return self._selected
 
     def _move(self, direction: Directions):
-        self.switch_state(UnitState.move, None, direction)
-
-        self._moving_animation.setStartValue(self.pos())
-        self._moving_animation.setEndValue(QPointF(
+        self.states.switch((UnitState.move, None, direction))
+        moving = QPropertyAnimation(self, QByteArray(bytes('pos', 'utf-8')))
+        moving.setDuration(config.DEFAULT_MOVE_ANIMATION_SPEED / self.model.speed.value)
+        moving.setStartValue(self.pos())
+        moving.setEndValue(QPointF(
             self.model.x * self._sprite_size,
             self.model.y * self._sprite_size))
 
-        self._moving_animation.start()
-        while self._moving_animation.state() == QPropertyAnimation.Running:
-            QApplication.processEvents()
+        moving.start()
+        while moving.state() == QPropertyAnimation.Running:
+             QCoreApplication.processEvents()
 
-        self.switch_state(UnitState.stand, None, direction)
+        self.states.switch((UnitState.stand, None, direction))
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
         if self.selected:
             painter.setRenderHint(painter.Antialiasing)
             painter.drawPixmap(0, 0, QPixmap(rc.get_overlay(overlays.Cursors.selected_cursor.name)
@@ -94,7 +95,7 @@ class Cell(SVGTile):
         self._hover_entered = False
         super().hoverEnterEvent(event)
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
         super().paint(painter, option, widget)
         if not self._hover_entered:
             return
@@ -107,12 +108,13 @@ class Cell(SVGTile):
 
 class Field(QGraphicsScene):
 
-    cell_activated = Signal(Coordinate)
-    unit_selected = Signal(Coordinate)
-    clear_selection = Signal()
+    cell_activated = Signal(Cell)
+    unit_selected = Signal(Unit)
+    selection_cleared = Signal()
 
-    def __init__(self, model: models.Field, parent: Optional[QObject] = None):
+    def __init__(self, model: models.Field, controller, parent: Optional[QObject] = None):
         super().__init__(parent)
+        self.controller = controller
         self.model = model
 
         for y in range(self.model.height):
@@ -123,21 +125,23 @@ class Field(QGraphicsScene):
                 self.addItem(cell_view)
                 cell_view.setPos(cell_view.element_size * x, cell_view.element_size * y)
 
+    def draw_path(self, start: Coordinate, destination: Coordinate, route: Iterable):
+        #self.draw
+        print(start)
+        pass
+
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
         if event.button() == Qt.LeftButton:
             if item := self.itemAt(event.scenePos(), QTransform()):
                 if isinstance(item, Cell):
-                    self.cell_activated.emit(item.model.position)
+                    self.cell_activated.emit(item)
                 elif isinstance(item, Unit):
+                    self.remove_selection()
                     item.select()
-                    self.unit_selected.emit(item.model.position)
+                    self.unit_selected.emit(item)
 
         elif event.button() == Qt.RightButton:
-            for item in self.items():
-                if isinstance(item, Unit):
-                    item.clear_selection()
-
-            self.clear_selection.emit()
+            self.remove_selection()
 
     def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
         item = self.itemAt(event.scenePos(), QTransform())
@@ -148,3 +152,10 @@ class Field(QGraphicsScene):
 
         #print(f'move {self.itemAt(event.scenePos(), QTransform())}')
         super().mouseMoveEvent(event)
+
+    def remove_selection(self):
+        for item in self.items():
+            if isinstance(item, Unit):
+                item.clear_selection()
+
+        self.selection_cleared.emit()
