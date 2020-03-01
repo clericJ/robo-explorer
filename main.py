@@ -258,7 +258,7 @@ class MainWindow(QMainWindow):
         sprite = QPixmap('resource\\sprites\\red17\\animated\\walk_forward.png').scaledToHeight(DEFAULT_SQUARE_SIZE, mode=Qt.SmoothTransformation)
         self.bot_wait_anim = Sprite()
         self.bot_wait_anim.set_animation(sprite)
-        self.bot_wait_anim.start()
+        self.bot_wait_anim.execute()
         self.game_map.scene.addItem(self.bot_wait_anim)
         self.bot_wait_anim.setPos(10,10)
 

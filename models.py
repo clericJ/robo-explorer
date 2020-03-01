@@ -13,7 +13,6 @@ import surfaces
 from core import Coordinate, Directions, Event
 
 class HavingPosition(ABC):
-
     @abstractproperty
     def position(self) -> Coordinate:
         pass
@@ -28,19 +27,27 @@ class HavingPosition(ABC):
 
 class Speed(Enum):
     slow = 1
-    middle = 2
+    medium = 2
     fast = 3
 
+    def slow_down(self):
+        return Speed.slow if self == Speed.medium else Speed.medium if self == Speed.fast else Speed.slow
+
+    def speed_up(self):
+        return Speed.fast if self == Speed.medium else Speed.medium if self == Speed.slow else Speed.fast
+
 class Unit(HavingPosition):
-    moved: Event = None  # destination: Directions
-    turned: Event = None  # from: Directions, to: Directions
-    route_calculated = None # start: Coordinate, destination: Coordinate, route: Iterable
+    moved: Event = None  # (destination: Directions)
+    turned: Event = None  # (from: Directions, to: Directions)
+    route_calculated = None # (start: Coordinate, finish: Coordinate, route: Iterable)
+    path_completed = None # ()
 
     def __init__(self, name: str, field: Field, position: Coordinate,
-                 speed: Speed = Speed.middle, direction: Directions = Directions.east):
+                 speed: Speed = Speed.medium, direction: Directions = Directions.east):
         self.moved = Event()
         self.turned = Event()
         self.route_calculated = Event()
+        self.path_completed = Event()
         self._direction = direction
         self._position = position
         self._field = field
@@ -75,13 +82,13 @@ class Unit(HavingPosition):
 
     @speed.setter
     def speed(self, speed: Speed):
-        assert isinstance(speed, Speed)
         self._speed = speed
 
     def turn(self, direction: Directions):
         previous = self._direction
-        self._direction = direction
-        self.turned.notify(previous, direction)
+        if previous != direction:
+            self._direction = direction
+            self.turned.notify(previous, direction)
 
     @property
     def field(self) -> Field:
@@ -93,7 +100,7 @@ class Unit(HavingPosition):
         new_position: Coordinate = self.position + direction.value
         destination: Cell = self.field.at_point(new_position)
 
-        if destination and (not destination.is_occupied) and destination.surface.passable:
+        if destination and destination.passable:
             self.field.at_point(self.position).remove()
             destination.put(self)
 
@@ -103,12 +110,20 @@ class Unit(HavingPosition):
 
             self.moved.notify(direction)
             result = True
+        else:
+            self.path_completed.notify()
 
         return result
 
+    def step_to(self, destination: Coordinate) -> bool:
+        result = False
+        if path := self.get_path(destination):
+            result = self.move(path[0])
+        return result
+
     def get_path(self, destination: Coordinate) -> Optional[List[Directions]]:
-        map_ = []
         result = None
+        map_ = []
         for y in range(self.field.width):
             map_.append([])
             for x in range(self.field.height):
@@ -118,10 +133,11 @@ class Unit(HavingPosition):
         # начальная точка маршрута
         map_[self.y][self.x] = 1
 
-        if self._find_path(map_, destination):
+        if (self.x != destination.x or self.y != destination.y) and self._find_path(map_, destination):
             result = self._generate_path(map_, destination)
             self.route_calculated.notify(self.position, destination, result)
-
+        else:
+            self.path_completed.notify()
         return result
 
     def _find_path(self, map_: List[List[int]], destination: Coordinate) -> bool:
@@ -157,19 +173,15 @@ class Unit(HavingPosition):
         result = list(range(weight))
         while weight:
             weight -= 1
-
             if y > 0 and map_[y - 1][x] == weight:
-                y -= 1
                 result[weight] = Directions.south
-
+                y -= 1
             elif y < (len(map_) - 1) and map_[y + 1][x] == weight:
                 result[weight] = Directions.north
                 y += 1
-
             elif x > 0 and map_[y][x - 1] == weight:
                 result[weight] = Directions.east
                 x -= 1
-
             elif x < (len(map_[y]) - 1) and map_[y][x + 1] == weight:
                 result[weight] = Directions.west
                 x += 1
@@ -185,6 +197,7 @@ class Cell(HavingPosition):
         self.removed = Event()
         self._surface = surface
         self._position = position
+        self._original_bot_speed = None
         self._bot = None
 
     @property
@@ -204,8 +217,15 @@ class Cell(HavingPosition):
         return self._position.y
 
     @property
-    def position(self):
+    def position(self) -> Coordinate:
         return self._position
+
+    @property
+    def passable(self) -> bool:
+        result = True
+        if not self.surface.passable or self.is_occupied:
+            result = False
+        return result
 
     @property
     def unit(self) -> Optional[Unit]:
@@ -215,6 +235,10 @@ class Cell(HavingPosition):
         if self.is_occupied:
             raise ValueError
 
+        if self.surface.speed != 0:
+            self._original_bot_speed = unit.speed
+            unit.speed = unit.speed.speed_up() if self.surface.speed > 0 else unit.speed.slow_down()
+
         self._bot = unit
         self.placed.notify(unit)
 
@@ -223,6 +247,9 @@ class Cell(HavingPosition):
             raise ValueError
 
         unit = self._bot
+        if self.surface.speed != 0:
+            unit.speed = self._original_bot_speed
+
         self._bot = None
         self.removed.notify(unit)
 

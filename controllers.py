@@ -1,74 +1,31 @@
 import sys
-from typing import Optional, Iterator, Callable, Iterable
-
-from PySide2.QtCore import QObject, QTimer
+from typing import Optional
 
 import models
 import views
-from core import Coordinate, MutableIterator
-
-class ActionChain(QObject):
-
-    def __init__(self, action: Callable=None, data: Iterable=None):
-        super().__init__()
-        self._data = data
-        self._action = action
-        self._interrupt_flag = False
-
-    def interrupt(self):
-        self._interrupt_flag = True
-
-    def set_data(self, data):
-        self._data = data
-
-    def set_action(self, action):
-        self._action = action
-
-    def run(self):
-        try:
-            self._action(next(self._data))
-        except StopIteration:
-            pass
-        else:
-            if not self._interrupt_flag:
-                QTimer.singleShot(0, lambda : self.run())
-            else:
-                self._data = ()
-                self._action = None
+import commands
+from core import Coordinate
 
 class Unit:
-
     def __init__(self, model: models.Unit):
-        self._moving_path = MutableIterator()
-        self.action = ActionChain()
-        self._interrupt_flag = False
+        self.view: Optional[views.Unit] = None
         self.model = model
-        self.view = None
+        self._command: Optional[commands.TriggerBasedNode] = None
+        self._chain = commands.Chain()
 
     def set_view(self, view: views.Unit):
         self.view = view
 
-    def interrupt_action(self):
-        self._interrupt_flag = True
-
-    # FIXME: проблема с паралельной анимацией нескольких юнитов
-    # вызванная тем что выполнение кода останавливается здесь
-    # processEvents не может переключить выполнение на этот код
     def move(self, position: Coordinate):
-        # если метод вызван во второй раз, во время того как не завершился первый вызов
-        # путь меняется на текущий, второй вызов завершается, а первый отпрабатывает новый путь
-        if path := self.model.get_path(position):
-            first_call = self._moving_path.is_empty()
-            self._moving_path.set(path)
+        if self._chain.is_running():
+            self._chain.interrupt()
+        else:
+            self._chain.clear()
+        node = commands.TriggerBasedNode(lambda: self.model.step_to(position), self.view.animation_ended)
+        self._chain.add(node)
 
-            if first_call:
-                ActionChain(self.model.move, self._moving_path).run()
-                # for next_step in self._moving_path:
-                #     if self._interrupt_flag:
-                #         self._interrupt_flag = False
-                #         break
-                #
-                #     self.model.move(next_step)
+        if not self._chain.is_running():
+            self._chain.execute()
 
 class Field:
     def __init__(self, model: models.Field):
@@ -119,17 +76,14 @@ def test(argv):
             self.scene_view = QGraphicsView(self)
             self.scene_view.setScene(self.field_scene)
 
-            red17 = models.Unit('red17', self.field_scene.model,
-                                Coordinate(0, 1), models.Speed.middle)
+            red17 = models.Unit('red17', self.field_scene.model, Coordinate(0, 1), models.Speed.medium)
+            red17_2 = models.Unit('red17', self.field_scene.model, Coordinate(4, 4), models.Speed.medium)
             field_controller.add_unit(red17)
-            red17_2 = models.Unit('red17', self.field_scene.model,
-                                Coordinate(4, 4), models.Speed.middle)
             field_controller.add_unit(red17_2)
 
             layout = QGridLayout()
             layout.addWidget(self.scene_view)
             self.setLayout(layout)
-
 
     app = QApplication(argv)
     window = Window()

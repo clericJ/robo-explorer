@@ -26,6 +26,7 @@ class SVGTile(QGraphicsItem):
 
 class FrameAnimation(QObject):
     frame_updated = Signal()
+    finished = Signal()
 
     def __init__(self, sprite: QPixmap, frames_per_second: int = config.DEFAULT_ANIMATION_SPEED,
                  parent: Optional[QObject] = None):
@@ -54,7 +55,11 @@ class FrameAnimation(QObject):
         return self._current_frame
 
     def increment_frame(self):
-        self._current_frame = 0 if self.this_last_frame() else self._current_frame + 1
+        if self.this_last_frame():
+            self.finished.emit()
+            self._current_frame = 0
+        else:
+            self._current_frame += 1
 
     def this_last_frame(self) -> bool:
         return self._current_frame >= self._frame_count - 1
@@ -65,26 +70,26 @@ class FrameAnimation(QObject):
     def is_running(self) -> bool:
         return self._animation_timer.isActive()
 
-    def run(self, frame: int = 0):
+    def run(self, frame: int = 0, frames_per_second = None):
         if not self.is_running():
             self._current_frame = frame
+            self._frames_per_second = frames_per_second or self.frames_per_second
             self._animation_timer.start(1000 // self.frames_per_second)
 
     def stop(self):
         if self.is_running():
             self._animation_timer.stop()
 
-    def draw_frame(self, painter: QPainter):
+    def draw(self, painter: QPainter):
         size = self.sprite.height()
         x = size * self.get_current_frame()
         painter.drawPixmap(QPoint(0, 0), self.sprite, QRect(x, 0, size, size))
 
-    @staticmethod
-    def load(name: str, state: UnitState, from_: Optional[Directions],
+    @classmethod
+    def load(cls, name: str, state: UnitState, from_: Optional[Directions],
              to: Directions, frames_per_second: int, size: int):
-        return FrameAnimation(QPixmap(rc.get_animated_sprite(name, state, from_, to)
-                                      ).scaledToHeight(size, mode=Qt.SmoothTransformation),
-                              frames_per_second)
+        return cls(QPixmap(rc.get_animated_sprite(name, state, from_, to)
+                    ).scaledToHeight(size, mode=Qt.SmoothTransformation), frames_per_second)
 
     def _update_frame(self):
         self.increment_frame()
@@ -94,13 +99,12 @@ class AnimatedSprite(QGraphicsObject):
 
     def __init__(self, parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
-        self.states = StateMachine()
-        self.states.switched.subscribe(self._update_connections)
-        self.states.switched.subscribe(lambda _, next_: next_.run())
+        self.animations = StateMachine()
+        self.animations.switched.subscribe(self._update_animations)
 
     @property
     def current_animation(self) -> Optional[FrameAnimation]:
-        return self.states.action()
+        return self.animations.action()
 
     def load_states(self, name: str, frames_per_second: int, size: int):
         for state in UnitState:
@@ -110,16 +114,18 @@ class AnimatedSprite(QGraphicsObject):
                     other_directions.discard(direction)
                     for from_ in other_directions:
                         animation = FrameAnimation.load(name, state, from_, direction, frames_per_second, size)
-                        self.states.add((state, from_, direction), animation)
+                        self.animations.add((state, from_, direction), animation)
                 else:
                     animation = FrameAnimation.load(name, state, None, direction, frames_per_second, size)
-                    self.states.add((state, None, direction), animation)
+                    self.animations.add((state, None, direction), animation)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
-        if animation := self.states.action():
-            animation.draw_frame(painter)
+        if animation := self.animations.action():
+            animation.draw(painter)
 
-    def _update_connections(self, previous: Optional[FrameAnimation], next_: FrameAnimation):
+    def _update_animations(self, previous: Optional[FrameAnimation], next_: FrameAnimation):
         if previous:
             previous.frame_updated.disconnect(self.update)
+            previous.stop()
         next_.frame_updated.connect(self.update)
+        next_.run()

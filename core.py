@@ -2,8 +2,9 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
+
 from enum import Enum
-from typing import Iterable, Any, Iterator, Hashable, Optional
+from typing import Any, Hashable, Optional
 
 class Coordinate:
     __slots__ = ('_x', '_y')
@@ -79,31 +80,6 @@ class Event:
     def notify(self, *args):
         for listener in self._listeners:
             listener(*args)
-
-class MutableIterator(Iterable):
-    def __init__(self, sequence: Iterable=None):
-        self._sequence = sequence if sequence is not None else ()
-        self._index = 0
-
-    def set(self, path: Iterable):
-        self._sequence = path
-        self._index = 0
-
-    def is_empty(self) -> bool:
-        return len(self._sequence) == 0
-
-    def __next__(self) -> Any:
-        try:
-            item = self._sequence[self._index]
-        except IndexError:
-            self._sequence = ()
-            raise StopIteration
-
-        self._index += 1
-        return item
-
-    def __iter__(self) -> Iterator:
-        return self
 
 class StateMachine:
     switched = None # (previous: Any, next: Any)
