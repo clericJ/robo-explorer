@@ -95,7 +95,7 @@ class Unit(HavingPosition):
         return self._field
 
     def move(self, direction: Directions) -> bool:
-        result = False
+        can_pass = False
 
         new_position: Coordinate = self.position + direction.value
         destination: Cell = self.field.at_point(new_position)
@@ -109,11 +109,11 @@ class Unit(HavingPosition):
                 self.turn(direction)
 
             self.moved.notify(direction)
-            result = True
+            can_pass = True
         else:
             self.path_completed.notify()
 
-        return result
+        return can_pass
 
     def step_to(self, destination: Coordinate) -> bool:
         result = False
@@ -128,7 +128,7 @@ class Unit(HavingPosition):
             map_.append([])
             for x in range(self.field.height):
                 cell = self.field.at(x, y)
-                map_[y].append(0 if cell.surface.passable and not cell.unit else -1)
+                map_[y].append(0 if cell.passable else -1)
 
         # начальная точка маршрута
         map_[self.y][self.x] = 1
@@ -336,7 +336,7 @@ def test():
                     if self.field.at(x, y).is_occupied:
                         line.append(BotView.direction_sprites[self.field.at(x, y).unit.direction])
                     else:
-                        line.append(str(int(not self.field.at(x, y).surface.passable)))
+                        line.append(str(int(not self.field.at(x, y).passable)))
 
                 print(config.SPACE_LITERAL.join(line))
                 line.clear()

@@ -4,10 +4,15 @@
 import os
 from typing import Optional
 
+from PySide2.QtGui import QColor
+
 from models import Directions
 from core import UnitState
 import config
 
+FIELD_BACKGROUND_COLOR = QColor(0, 0, 0)
+PASSABLE_CURSOR_COLOR = QColor(10, 150, 10, 100)
+IMPASSABLE_CURSOR_COLOR = QColor(150, 10, 10, 100)
 
 def get_resource(path: str):
     result = os.path.normpath(path)

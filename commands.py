@@ -29,6 +29,7 @@ class TriggerBasedNode(QObject):
             self.finished.emit()
 
         elif self._action():
+            print('new_action')
             self._trigger.connect(self.execute)
             self._connected = True
         else:
