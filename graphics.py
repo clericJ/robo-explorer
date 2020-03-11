@@ -1,20 +1,28 @@
+import math
 from typing import Optional
-from operator import iadd, isub
-from PySide2.QtCore import QRect, QTimer, Qt, QPoint, Signal, QObject, QRectF, QPointF, QTimeLine
-from PySide2.QtGui import QPixmap, QPainter, QWheelEvent, QMouseEvent
-from PySide2.QtSvg import QSvgRenderer
-from PySide2.QtWidgets import QGraphicsItem, QWidget, QStyleOptionGraphicsItem, QGraphicsObject, QGraphicsView
 
-import config
+from PySide2.QtCore import QRect, QTimer, Qt, QPoint, Signal, QObject, QRectF, QPointF, QTimeLine
+from PySide2.QtGui import QPixmap, QPainter, QWheelEvent, QMouseEvent, QSurfaceFormat
+from PySide2.QtOpenGL import QGL, QGLWidget, QGLFormat
+from PySide2.QtSvg import QSvgRenderer
+from PySide2.QtWidgets import QGraphicsItem, QWidget, QStyleOptionGraphicsItem, QGraphicsObject, QGraphicsView, \
+    QOpenGLWidget
+
 import resources as rc
 from core import Directions, UnitState, StateMachine
 
-
 class Tile(QGraphicsItem):
-    def __init__(self, sprite: QPixmap, size=config.DEFAULT_SQUARE_SIZE, parent: Optional[QGraphicsItem] = None):
+    def __init__(self, sprite: QPixmap, size, parent: Optional[QGraphicsItem]=None):
         super().__init__(parent)
         self.sprite = sprite
         self._size = size
+
+    @property
+    def element_size(self) -> int:
+        return self._size
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(0, 0, self._size, self._size)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
         painter.setRenderHint(painter.SmoothPixmapTransform)
@@ -47,6 +55,7 @@ class FrameAnimation(QObject):
         self._frame_count = self._sprite.width() // self._sprite.height()
         self._frames_per_second = frames_per_second
         self._animation_timer = QTimer()
+        self._animation_timer.setTimerType(Qt.PreciseTimer)
         self._animation_timer.timeout.connect(self._update_frame)
 
     @property
@@ -65,13 +74,13 @@ class FrameAnimation(QObject):
         return self._current_frame
 
     def increment_frame(self):
-        if self.this_last_frame():
+        if self.is_last_frame():
             self.finished.emit()
             self._current_frame = 0
         else:
             self._current_frame += 1
 
-    def this_last_frame(self) -> bool:
+    def is_last_frame(self) -> bool:
         return self._current_frame >= self._frame_count - 1
 
     def reset(self):
@@ -84,7 +93,7 @@ class FrameAnimation(QObject):
         if not self.is_running():
             self._current_frame = frame
             self._frames_per_second = frames_per_second or self.frames_per_second
-            self._animation_timer.start(1000 // self.frames_per_second)
+            self._animation_timer.start(math.ceil(1000 / self.frames_per_second))
 
     def stop(self):
         if self.is_running():
@@ -103,7 +112,6 @@ class FrameAnimation(QObject):
                     ).scaledToHeight(size, mode=Qt.SmoothTransformation), frames_per_second)
 
     def _update_frame(self):
-        print(self._current_frame)
         self.increment_frame()
         self.frame_updated.emit()
 
@@ -116,7 +124,7 @@ class AnimatedSprite(QGraphicsObject):
 
     @property
     def current_animation(self) -> Optional[FrameAnimation]:
-        return self.animations.action()
+        return self.animations.get_action()
 
     def load_states(self, name: str, frames_per_second: int, size: int):
         for state in UnitState:
@@ -132,7 +140,7 @@ class AnimatedSprite(QGraphicsObject):
                     self.animations.add((state, None, direction), animation)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
-        if animation := self.animations.action():
+        if animation := self.animations.get_action():
             animation.draw(painter)
 
     def _update_animations(self, previous: Optional[FrameAnimation], next_: FrameAnimation):
@@ -142,9 +150,8 @@ class AnimatedSprite(QGraphicsObject):
         next_.frame_updated.connect(self.update)
         next_.run()
 
-
+# TODO: переписать реализацию, отказаться от таймера слежения за мыщью
 class CursorTrackedScrollGraphicsView(QGraphicsView):
-
     def __init__(self, parent: Optional[QWidget]=None):
         super().__init__(parent)
 
@@ -154,24 +161,25 @@ class CursorTrackedScrollGraphicsView(QGraphicsView):
         self._mouse_tracking_timer.timeout.connect(self._scroll_area)
 
     def _scroll_area(self):
-        sensitive_area = 20
-        scroll_speed = 10
+        sensitive_area = 30 # in points
 
-        horizontal_scroll = self.horizontalScrollBar()
-        vertical_scroll = self.verticalScrollBar()
+        hscroll = self.horizontalScrollBar()
+        vscroll = self.verticalScrollBar()
+
+        x, y = self._visible_region.x(), self._visible_region.y()
         width, height = self._visible_region.width(), self._visible_region.height()
 
-        if self._mouse_position.x() >= width - width / sensitive_area:
-            horizontal_scroll.setValue(horizontal_scroll.value()+scroll_speed)
+        if self._mouse_position.x() >= width - width // sensitive_area:
+            hscroll.setValue(hscroll.value() + -(width - self._mouse_position.x() - width // sensitive_area))
 
-        if self._mouse_position.y() >= height - height / sensitive_area:
-            vertical_scroll.setValue(vertical_scroll.value()+scroll_speed)
+        if self._mouse_position.y() >= height - height // sensitive_area:
+            vscroll.setValue(vscroll.value() + -(height - self._mouse_position.y() - height // sensitive_area))
 
-        if self._mouse_position.x() - width / sensitive_area <= self._visible_region.x():
-            horizontal_scroll.setValue(horizontal_scroll.value()-scroll_speed)
+        if self._mouse_position.x() - width // sensitive_area <= x:
+            hscroll.setValue(hscroll.value() - -(self._mouse_position.x() - width // sensitive_area))
 
-        if self._mouse_position.y() - height / sensitive_area <= self._visible_region.y():
-            vertical_scroll.setValue(vertical_scroll.value()-scroll_speed)
+        if self._mouse_position.y() - height // sensitive_area <= y:
+            vscroll.setValue(vscroll.value() - -(self._mouse_position.y() - height // sensitive_area))
 
     def mouseMoveEvent(self, event: QMouseEvent):
         self._mouse_position = event.pos()
@@ -179,11 +187,12 @@ class CursorTrackedScrollGraphicsView(QGraphicsView):
 
         if not self._mouse_tracking_timer.isActive():
             self._mouse_tracking_timer.start(10)
+        else:
+            self._scroll_area()
 
         super().mouseMoveEvent(event)
 
 class ScalableGraphicsView(QGraphicsView):
-
     def __init__(self, parent: Optional[QWidget]=None):
         super().__init__(parent)
 
@@ -220,6 +229,29 @@ class ScalableGraphicsView(QGraphicsView):
             delta = self.mapToScene(self._mouse_position) - old
             self.translate(delta.x(), delta.y())
 
-#class UserControlledGraphicsView(CursorTrackedScrollGraphicsView, ScalableGraphicsView):
-class UserControlledGraphicsView(QGraphicsView):
+class UserControlledGraphicsView(CursorTrackedScrollGraphicsView, ScalableGraphicsView):
+    pass
+
+class OpenGLGraphicsView(QGraphicsView):
+    def __init__(self, parent: Optional[QWidget]=None):
+        super().__init__(parent)
+        format_ = QSurfaceFormat()
+        format_.setDepthBufferSize(24)
+        format_.setStencilBufferSize(8)
+        format_.setVersion(3, 2)
+        format_.setProfile(QSurfaceFormat.CoreProfile)
+        ogl_widget = QOpenGLWidget()
+        ogl_widget.setFormat(format_)
+
+        self.setViewport(ogl_widget)
+        self.setViewportUpdateMode(UserControlledGraphicsView.FullViewportUpdate)
+
+# QGLWidget помечен как устаревший но QOpenGLWidget тормозит на этой версии Qt
+class OGLGraphicsView(QGraphicsView):
+    def __init__(self, parent: Optional[QWidget]=None):
+        super().__init__(parent)
+        self.setViewport(QGLWidget(QGLFormat(QGL.SampleBuffers)))
+        self.setViewportUpdateMode(UserControlledGraphicsView.FullViewportUpdate)
+
+class GameGraphicsView(OGLGraphicsView, UserControlledGraphicsView):
     pass

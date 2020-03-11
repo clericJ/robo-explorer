@@ -1,104 +1,124 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-from typing import Optional
+import math
+from typing import Optional, Iterable, List
 
 from PySide2.QtCore import QObject, QRectF, QPointF, QPropertyAnimation, Qt, Signal, QByteArray
-from PySide2.QtGui import QPainter, QPixmap, QMouseEvent, QBrush
+from PySide2.QtGui import QPainter, QPixmap, QMouseEvent, QBrush, QTransform, QPainterPath
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneHoverEvent, \
-    QStyleOptionGraphicsItem, QWidget, QGraphicsScene
+    QStyleOptionGraphicsItem, QWidget, QGraphicsScene, QGraphicsSceneMouseEvent
 
 import config
 import models
+import overlays
 import resources as rc
-from core import Directions, UnitState
-from graphics import AnimatedSprite, Tile, UserControlledGraphicsView
-from overlays import OverlayEnums
-
-
-# TODO: придумать что нибудь с overlay
-
-class Overlappable(AnimatedSprite):
-
-    def set_overlay(self, overlay):
-        self._overlays.append(overlay)
-
-    def remove_overlay(self, overlay):
-        index = self._overlays.index(overlay)
-        del self._overlays[index]
-
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
-        prev = []
-        post = []
-        for overlay in self._overlays:
-            if overlay.order == PaintOrder.prev:
-                prev.append(overlay)
-            else:
-                post.append(overlay)
-
-        for overlay in prev:
-            overlay.draw(painter)
-
-        super().paint(painter, option, widget)
-
-        for overlay in post:
-            overlay.draw(painter)
+from core import Directions, UnitState, AutoDisconnector, Coordinate
+from graphics import Tile, AnimatedSprite
 
 class Unit(AnimatedSprite):
     animation_ended = Signal()
 
-    def __init__(self, model: models.Unit, controller, size, parent: Optional[QGraphicsItem] = None):
+    def __init__(self, model: models.Unit, controller, size, parent: Optional[QGraphicsItem]=None):
         super().__init__(parent)
 
         self.model = model
         self.controller = controller
+
+        self.model.path_completed.subscribe(self._stand)
         self.model.turned.subscribe(self._turn)
         self.model.moved.subscribe(self._move)
+
+        self.overlays = overlays.Map()
         self._sprite_size = size
+        self._path_list: Optional[List[QPainterPath]] = []
         self._selected = False
 
         self.setPos(model.x * size, model.y * size)
         self.load_states(self.model.name, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
-        self.animations.switch((UnitState.stand, None, self.model.direction))
-        self._moving: Optional[QPropertyAnimation] = None
+        self._stand()
+
+    @property
+    def element_size(self) -> int:
+        return self._sprite_size
 
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._sprite_size, self._sprite_size)
 
     def select(self):
+        self.model.route_calculated.subscribe(self.draw_path)
+
+        size = self.boundingRect().size()
+        overlay = overlays.Pixmap(overlays.Names.cursor_selected, size, overlays.PaintOrder.prev)
+        self.overlays.add(overlay)
         self._selected = True
 
     def clear_selection(self):
-        self._selected = False
+        if self._selected:
+            self._selected = False
+            self.overlays.remove(self.overlays.get(overlays.Names.cursor_selected))
+            self.model.route_calculated.unsubscribe(self.draw_path)
+            self.clear_path()
 
-    @property
-    def sprite_size(self):
-        return self._sprite_size
+    def draw_path(self, start: Coordinate, finish: Coordinate, route: Iterable[Directions]):
+        self.clear_path()
+        path = self.get_graphic_path(start, finish, route)
+        self._path_list.append(path)
+        self.scene().add_unit_path(path)
+
+    def clear_path(self):
+        for path in self._path_list:
+            self.scene().remove_unit_path(path)
+
+        self._path_list = []
+
+    def get_graphic_path(self, start: Coordinate, finish: Coordinate, route: Iterable[Directions]) -> QPainterPath:
+        def generate_half_size_rect(point):
+            return QRectF(point.x() + self._sprite_size / 4, point.y() + self._sprite_size / 4,
+                          self._sprite_size / 2, self._sprite_size / 2)
+
+        start_point = QPointF(start.x * self._sprite_size, start.y * self._sprite_size)
+        finish_point = QPointF(finish.x * self._sprite_size, finish.y * self._sprite_size)
+
+        path = QPainterPath()
+        path.addEllipse(generate_half_size_rect(start_point))
+
+        prev_point = QPointF(start_point.x() + self._sprite_size/2,
+                             start_point.y() + self._sprite_size/2)
+        for step in route:
+            next_point = QPointF(prev_point.x() + step.value.x * self._sprite_size,
+                                 prev_point.y() + step.value.y * self._sprite_size)
+
+            path.moveTo(prev_point)
+            path.lineTo(next_point)
+            prev_point = next_point
+
+        path.addEllipse(generate_half_size_rect(finish_point))
+        return path
 
     @property
     def selected(self) -> bool:
         return self._selected
 
-    # привязать смену кадров анимации к действию (напрю изменению QPropertyAnimation)
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
+        self.overlays.draw(painter, overlays.PaintOrder.prev)
+        super().paint(painter, option, widget)
+        self.overlays.draw(painter, overlays.PaintOrder.post)
+
     def _move(self, direction: Directions):
-        self._moving = QPropertyAnimation(self, QByteArray(bytes('pos', 'utf-8')))
-        self._moving.setDuration(config.DEFAULT_MOVE_ANIMATION_SPEED // self.model.speed.value)
-        self._moving.setEndValue(QPointF(self.model.x * self._sprite_size, self.model.y * self._sprite_size))
-        self._moving.setStartValue(self.pos())
-        self._moving.finished.connect(self.animation_ended.emit)
-        self._moving.finished.connect(lambda: self.animations.switch((UnitState.stand, None, self.model.direction)))
-        self._moving.start(QPropertyAnimation.DeleteWhenStopped)
+        moving = QPropertyAnimation(self, QByteArray(bytes('pos', 'utf-8')), self)
+        moving.setDuration(math.ceil(config.DEFAULT_MOVE_ANIMATION_SPEED / self.model.speed.value))
+        moving.setEndValue(QPointF(self.model.x * self._sprite_size, self.model.y * self._sprite_size))
+        moving.setStartValue(self.pos())
+        moving.finished.connect(self.animation_ended.emit)
+
+        moving.start(QPropertyAnimation.DeleteWhenStopped)
         self.animations.switch((UnitState.move, None, direction))
 
     def _turn(self, old: Directions, new: Directions):
         animation = self.animations.switch((UnitState.turn, old, new))
-        animation.finished.connect(self.animation_ended.emit)
-        animation.finished.connect(lambda: self.animations.switch((UnitState.stand, None, self.model.direction)))
+        AutoDisconnector(animation.finished, self.animation_ended.emit, self)
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
-        if self.selected:
-            painter.drawPixmap(0, 0, QPixmap(rc.get_overlay(OverlayEnums.Cursors.selected.name)
-                                            ).scaledToHeight(int(self.boundingRect().height())))
-        super().paint(painter, option, widget)
+    def _stand(self):
+        self.animations.switch((UnitState.stand, None, self.model.direction))
+        self.clear_path()
 
 class Cell(Tile):
     def __init__(self, model: models.Cell, size, parent: Optional[QGraphicsItem] = None):
@@ -106,75 +126,87 @@ class Cell(Tile):
         tile = QPixmap(rc.get_tile(model.surface.name)).scaledToHeight(size, mode=Qt.SmoothTransformation)
         super().__init__(tile, size, parent)
         self.setAcceptHoverEvents(True)
-        self._hover_entered = False
+        self.overlays = overlays.Map()
         self.model = model
 
-    @property
-    def element_size(self) -> int:
-        return self._size
-
-    def boundingRect(self) -> QRectF:
-        return QRectF(0, 0, self._size, self._size)
-
     def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
-        self._hover_entered = True
+        size = self.boundingRect().size()
+        #self.overlays.add(overlays.Pixmap(overlays.Names.cursor_move, size, overlays.PaintOrder.post))
         super().hoverEnterEvent(event)
 
     def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent):
-        self._hover_entered = False
+        #self.overlays.remove(self.overlays.get(overlays.Names.cursor_move))
         super().hoverEnterEvent(event)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
+        self.overlays.draw(painter, overlays.PaintOrder.prev)
         super().paint(painter, option, widget)
-        if not self._hover_entered:
-            return
-        # painter.setPen(Qt.NoPen)
-        # painter.setRenderHint(painter.Antialiasing)
-        # painter.setBrush(QBrush(rc.PASSABLE_CURSOR_COLOR if self.model.passable else rc.IMPASSABLE_CURSOR_COLOR))
-        # painter.drawRoundedRect(self.boundingRect(), 45, 45)
+        self.overlays.draw(painter, overlays.PaintOrder.post)
 
     def __repr__(self) -> str:
         return f'views.Cell({self.model.surface.name})'
 
-class Field(UserControlledGraphicsView):
+class Field(QGraphicsScene):
     cell_activated = Signal(Cell)
     unit_selected = Signal(Unit)
     selection_cleared = Signal()
 
-    def __init__(self, model: models.Field, controller, elements_size: int, parent: Optional[QObject] = None):
+    def __init__(self, model: models.Field, controller, elements_size: int, parent: Optional[QObject]=None):
         super().__init__(parent)
         self.setBackgroundBrush(QBrush(rc.FIELD_BACKGROUND_COLOR))
+
+        self._unit_selected = False
+        self._units_path: List[QPainterPath] = []
         self._elements_size = elements_size
         self.controller = controller
         self.model = model
+
+        self._load_cells()
 
     @property
     def elements_size(self):
         return self._elements_size
 
-    def setScene(self, scene: QGraphicsScene):
-        super().setScene(scene)
-        self._load_cells()
+    def add_unit(self, unit: Unit):
+        self.addItem(unit)
 
-    def mouseReleaseEvent(self, event: QMouseEvent):
+    def add_unit_path(self, path: QPainterPath):
+        self._units_path.append(path)
+
+    def remove_unit_path(self, path: QPainterPath):
+        index = self._units_path.index(path)
+        del self._units_path[index]
+
+    def drawForeground(self, painter: QPainter, rect: QRectF):
+        painter.setRenderHint(painter.Antialiasing)
+        painter.setPen(rc.PATH_PEN)
+
+        for path in self._units_path:
+            painter.drawPath(path)
+
+        super().drawForeground(painter, rect)
+
+    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
         if event.button() == Qt.LeftButton:
-            if item := self.itemAt(event.pos()):
+            if item := self.itemAt(event.scenePos(), QTransform()):
+
                 if isinstance(item, Cell):
                     self.cell_activated.emit(item)
 
                 elif isinstance(item, Unit):
                     self.remove_selection()
                     item.select()
+                    self._unit_selected = True
                     self.unit_selected.emit(item)
 
         elif event.button() == Qt.RightButton:
+            self._unit_selected = False
             self.remove_selection()
 
         super().mouseReleaseEvent(event)
 
-    # TODO: перенести оверлеи сюда
     def mouseMoveEvent(self, event: QMouseEvent):
-        if item := self.itemAt(event.pos()):
+        if item := self.itemAt(event.scenePos(), QTransform()):
             pass
         super().mouseMoveEvent(event)
 
@@ -194,5 +226,5 @@ class Field(UserControlledGraphicsView):
                 cell_model = self.model.at(x, y)
                 cell_view = Cell(cell_model, self._elements_size)
 
-                self.scene().addItem(cell_view)
+                self.addItem(cell_view)
                 cell_view.setPos(cell_view.element_size * x, cell_view.element_size * y)

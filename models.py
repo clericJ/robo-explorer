@@ -1,27 +1,28 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import io
 import os
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, List
-from abc import ABC, abstractproperty
 
 import config
 import surfaces
 from core import Coordinate, Directions, Event
 
 class HavingPosition(ABC):
-    @abstractproperty
+    @property
+    @abstractmethod
     def position(self) -> Coordinate:
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def x(self) -> int:
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def y(self) -> int:
         pass
 
@@ -39,7 +40,7 @@ class Speed(Enum):
 class Unit(HavingPosition):
     moved: Event = None  # (destination: Directions)
     turned: Event = None  # (from: Directions, to: Directions)
-    route_calculated = None # (start: Coordinate, finish: Coordinate, route: Iterable)
+    route_calculated = None # (start: Coordinate, finish: Coordinate, route: Iterable[Directions])
     path_completed = None # ()
 
     def __init__(self, name: str, field: Field, position: Coordinate,
@@ -85,17 +86,21 @@ class Unit(HavingPosition):
         self._speed = speed
 
     def turn(self, direction: Directions):
+        turned = False
         previous = self._direction
         if previous != direction:
             self._direction = direction
             self.turned.notify(previous, direction)
+            turned = True
+
+        return turned
 
     @property
     def field(self) -> Field:
         return self._field
 
     def move(self, direction: Directions) -> bool:
-        can_pass = False
+        moved = False
 
         new_position: Coordinate = self.position + direction.value
         destination: Cell = self.field.at_point(new_position)
@@ -105,23 +110,14 @@ class Unit(HavingPosition):
             destination.put(self)
 
             self._position = new_position
-            if self._direction != direction:
-                self.turn(direction)
-
             self.moved.notify(direction)
-            can_pass = True
+            moved = True
         else:
             self.path_completed.notify()
 
-        return can_pass
+        return moved
 
-    def step_to(self, destination: Coordinate) -> bool:
-        result = False
-        if path := self.get_path(destination):
-            result = self.move(path[0])
-        return result
-
-    def get_path(self, destination: Coordinate) -> Optional[List[Directions]]:
+    def generate_path(self, destination: Coordinate) -> Optional[List[Directions]]:
         result = None
         map_ = []
         for y in range(self.field.width):
@@ -133,14 +129,14 @@ class Unit(HavingPosition):
         # начальная точка маршрута
         map_[self.y][self.x] = 1
 
-        if (self.x != destination.x or self.y != destination.y) and self._find_path(map_, destination):
+        if self._find_path(map_, destination):
             result = self._generate_path(map_, destination)
             self.route_calculated.notify(self.position, destination, result)
-        else:
-            self.path_completed.notify()
+
         return result
 
-    def _find_path(self, map_: List[List[int]], destination: Coordinate) -> bool:
+    @staticmethod
+    def _find_path(map_: List[List[int]], destination: Coordinate) -> bool:
         weight = 1
         for i in range(len(map_) * len(map_[0])):
             weight += 1
@@ -165,7 +161,8 @@ class Unit(HavingPosition):
                             return True
         return False
 
-    def _generate_path(self, map_: List[List], destination: Coordinate) -> List[Directions]:
+    @staticmethod
+    def _generate_path(map_: List[List], destination: Coordinate) -> List[Directions]:
         y = destination.y
         x = destination.x
 
@@ -296,9 +293,9 @@ class Field:
             stream.write(config.TAB_LITERAL.join(i.surface.name for i in self._matrix[y]))
             stream.write(config.NL_LITERAL)
 
-    def _create_empty_matrix(self, width: int, height: int) -> List[List]:
+    @staticmethod
+    def _create_empty_matrix(width: int, height: int) -> List[List]:
         return [[Cell(surfaces.empty, Coordinate(i, j)) for i in range(width)] for j in range(height)]
-
 
 def test():
     from PySide2.QtCore import QObject
@@ -318,7 +315,6 @@ def test():
             return self.direction_sprites[self._unit.direction]
 
     class FieldView:
-
         def __init__(self, field: Field):
             self._field = field
 
@@ -351,7 +347,7 @@ def test():
     player = Unit('player', field, Coordinate(0, 1))
     player.moved.subscribe(lambda x: print(f'moved to {x.name}'))
     player.turned.subscribe(lambda x, y: print(f'turned from {x.name} to {y.name}'))
-    path = player.get_path(Coordinate(8, 5))
+    path = player.generate_path(Coordinate(8, 5))
 
     field_view.update()
     if path:

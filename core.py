@@ -1,10 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Hashable, Optional
+from typing import Any, Hashable, Optional, Callable, List, Tuple
+
+from PySide2.QtCore import QObject, Signal
 
 class Coordinate:
     __slots__ = ('_x', '_y')
@@ -20,6 +19,9 @@ class Coordinate:
     @property
     def y(self) -> int:
         return self._y
+
+    def equals(self, other: Coordinate) -> bool:
+        return self._x == other.x and self._y == other.y
 
     def __add__(self, other: Coordinate):
         return Coordinate(self.x + other.x, self.y + other.y)
@@ -63,13 +65,13 @@ class UnitState(Enum):
 
 class Event:
     def __init__(self):
-        self._listeners = []
+        self._listeners: List[Callable] = []
 
-    def subscribe(self, listener):
+    def subscribe(self, listener: Callable):
         if listener not in self._listeners:
             self._listeners.append(listener)
 
-    def unsubscribe(self, listener) -> bool:
+    def unsubscribe(self, listener: Callable) -> bool:
         result = True
         try:
             self._listeners.remove(listener)
@@ -96,13 +98,13 @@ class StateMachine:
         del self._states[state]
 
     def switch(self, state: Hashable) -> Any:
-        previous = self.action()
+        previous = self.get_action()
         self._current = state
-        self.switched.notify(previous, self.action())
+        self.switched.notify(previous, self.get_action())
 
         return self._states[state]
 
-    def action(self) -> Any:
+    def get_action(self) -> Any:
         if self._current:
             if self._current not in self._states:
                 raise KeyError(f'Action for state: {self._current} not found')
@@ -110,3 +112,15 @@ class StateMachine:
 
     def state(self) -> Optional[Hashable]:
         return self._current
+
+class AutoDisconnector(QObject):
+    def __init__(self, finished: Signal, before: Callable, parent: Optional[QObject]=None):
+        super().__init__(parent)
+        self._before = before
+        self._finished_signal = finished
+        self._finished_signal.connect(self.final)
+
+    def final(self):
+        self._before()
+        self._finished_signal.disconnect(self.final)
+

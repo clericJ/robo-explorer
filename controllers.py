@@ -1,91 +1,93 @@
 import sys
-from typing import Optional, Callable, Iterable
+from typing import Optional, Iterable
 
+import commands
 import config
 import models
 import views
-import commands
 from core import Coordinate
+from graphics import GameGraphicsView
+
 
 class Unit:
     def __init__(self, model: models.Unit):
+        self._command_chain = commands.Chain()
         self.view: Optional[views.Unit] = None
         self.model = model
-        self._command: Optional[commands.TriggerBasedNode] = None
-        self._chain = commands.Chain()
 
     def set_view(self, view: views.Unit):
         self.view = view
 
-    def move(self, position: Coordinate):
-        self._execute_commands([lambda: self.model.step_to(position)])
+    def move(self, position: Coordinate, interrupt: bool=True):
+        self._execute_commands([commands.UnitMove(self.model, position, self.view.animation_ended)], interrupt)
 
-    def _execute_commands(self, command_list: Iterable[Callable]):
-        if self._chain.is_running():
-            self._chain.interrupt()
+    def _execute_commands(self, command_list: Iterable, interrupt_next_commands: bool=True):
+        if self._command_chain.is_running() and interrupt_next_commands:
+            self._command_chain.interrupt()
         else:
-            self._chain.clear()
+            self._command_chain.clear()
         for command in command_list:
-            node = commands.TriggerBasedNode(command, self.view.animation_ended)
-            self._chain.add(node)
+            self._command_chain.add(command)
 
-        if not self._chain.is_running():
-            self._chain.execute()
+        if not self._command_chain.is_running():
+            self._command_chain.execute()
 
 class Field:
     def __init__(self, model: models.Field):
-        self._selected_unit: Optional[views.Unit] = None
+        self._active_unit: Optional[views.Unit] = None
         self.view: Optional[views.Field] = None
         self.model = model
 
     def set_view(self, view: views.Field):
-        view.unit_selected.connect(self._unit_selected)
-        view.cell_activated.connect(self._cell_activated)
-        view.selection_cleared.connect(self._clear_selection)
+        view.unit_selected.connect(self.set_active_unit)
+        view.cell_activated.connect(self.activate_cell)
+        view.selection_cleared.connect(self.clear_active_unit)
         self.view = view
 
     def add_unit(self, model: models.Unit):
         controller = Unit(model)
         view = views.Unit(model, controller, self.view.elements_size)
         controller.set_view(view)
-        self.view.scene().addItem(view)
+        self.view.add_unit(view)
 
-    def get_selected(self) -> Optional[views.Unit]:
-        return self._selected_unit
+    def get_active_unit(self) -> Optional[views.Unit]:
+        return self._active_unit
 
-    def _cell_activated(self, cell: views.Cell):
-        if unit := self.get_selected():
+    def set_active_unit(self, unit: views.Unit):
+        self._active_unit = unit
+
+    def clear_active_unit(self):
+        self._active_unit = None
+
+    def activate_cell(self, cell: views.Cell):
+        if unit := self.get_active_unit():
             unit.controller.move(cell.model.position)
 
-    def _unit_selected(self, unit: views.Unit):
-        self._selected_unit = unit
-
-    def _clear_selection(self):
-        self._selected_unit = None
-
 def test(argv):
-    from PySide2.QtWidgets import QWidget, QApplication, QGridLayout, QGraphicsScene
+    from PySide2.QtWidgets import QWidget, QApplication, QGridLayout
 
     class Window(QWidget):
-
         def __init__(self, parent=None):
             super().__init__(parent)
 
             self.setMouseTracking(True)
             field_model = models.Field(10, 10)
-            field_model.load(open('maps/test.txt', 'r'))
-            field_controller = Field(field_model)
-            self.scene_view = views.Field(field_model, field_controller, config.DEFAULT_SQUARE_SIZE, parent=self)
-            field_controller.set_view(self.scene_view)
-            self.scene_view.setScene(QGraphicsScene())
+            field_model.load(open('maps/test2.txt', 'r'))
 
-            red17 = models.Unit('red17', self.scene_view.model, Coordinate(0, 1), models.Speed.medium)
-            red17_2 = models.Unit('red17', self.scene_view.model, Coordinate(4, 4), models.Speed.medium)
+            field_controller = Field(field_model)
+            self.main_view = GameGraphicsView()
+
+            scene = views.Field(field_model, field_controller, config.DEFAULT_SQUARE_SIZE, parent=self)
+            field_controller.set_view(scene)
+            self.main_view.setScene(scene)
+
+            red17 = models.Unit('red17', scene.model, Coordinate(0, 1), models.Speed.fast)
+            red17_2 = models.Unit('red17', scene.model, Coordinate(4, 4), models.Speed.medium)
             field_controller.add_unit(red17)
-            #field_controller.add_unit(red17_2)
+            field_controller.add_unit(red17_2)
 
             layout = QGridLayout()
-            layout.addWidget(self.scene_view)
+            layout.addWidget(self.main_view)
             self.setLayout(layout)
 
     app = QApplication(argv)

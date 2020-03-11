@@ -13,3 +13,4 @@ MAPS_PATH = os.path.join(os.path.abspath(os.path.curdir), 'maps')
 NL_LITERAL = '\n'
 TAB_LITERAL = '\t'
 SPACE_LITERAL = ' '
+MAIN_VIEW_INDEX = 0

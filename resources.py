@@ -1,10 +1,7 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import os
 from typing import Optional
 
-from PySide2.QtGui import QColor
+from PySide2.QtGui import QColor, QPen, Qt
 
 from models import Directions
 from core import UnitState
@@ -13,11 +10,12 @@ import config
 FIELD_BACKGROUND_COLOR = QColor(0, 0, 0)
 PASSABLE_CURSOR_COLOR = QColor(10, 150, 10, 100)
 IMPASSABLE_CURSOR_COLOR = QColor(150, 10, 10, 100)
+PATH_PEN = QPen(QColor(255, 255, 255, 150), 10, Qt.SolidLine)
 
-def get_resource(path: str):
+def get_resource(path: str) -> str:
     result = os.path.normpath(path)
     if not os.path.isfile(result):
-        raise FileNotFoundError('resource file "{result}" not found')
+        raise FileNotFoundError(f'resource file "{result}" not found')
 
     return result
 
@@ -33,13 +31,8 @@ def get_animated_sprite(name: str, state: UnitState,
     template = (f'{state.name}_{to.name}.png' if not from_
                 else f'{state.name}_from_{from_.name}_to_{to.name}.png')
 
-    result = os.path.normpath(os.path.join(config.SPRITES_PATH, f'{name}',
+    return get_resource(os.path.join(config.SPRITES_PATH, f'{name}',
                                            'animated', template))
-
-    if not os.path.isfile(result):
-        raise FileNotFoundError(f'resource file "{result}" not found')
-
-    return result
 
 def test():
     print(get_tile('sand-001'))
