@@ -1,28 +1,30 @@
 import contextlib
+from abc import ABC, abstractmethod
 from typing import Optional, List, Callable, Any
 
-from PySide2.QtCore import Signal, QObject
-
 import models
-from core import Coordinate
+from core import Coordinate, Event
 
-class Command(QObject):
+class Command(ABC):
     finished = NotImplemented
 
+    @abstractmethod
     def interrupt(self):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def execute(self):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def finish(self):
-        raise NotImplementedError
+        pass
 
 class TriggerBased(Command):
-    finished = Signal()
+    finished = None
 
-    def __init__(self, action: Callable[[], bool], trigger: Signal, parent: Optional[QObject]=None):
-        super().__init__(parent)
+    def __init__(self, action: Callable[[], bool], trigger: Event):
+        self.finished = Event()
         self._connected = False
         self._interrupt = False
         self._trigger = trigger
@@ -36,7 +38,7 @@ class TriggerBased(Command):
 
     def execute(self):
         if self._connected:
-            self._trigger.disconnect(self.execute)
+            self._trigger.unsubscribe(self.execute)
             self._connected = False
 
         if self._interrupt:
@@ -44,19 +46,19 @@ class TriggerBased(Command):
             self.finish()
 
         elif self._action():
-            self._trigger.connect(self.execute)
+            self._trigger.subscribe(self.execute)
             self._connected = True
         else:
             self.finish()
 
     def finish(self):
-        self.finished.emit()
+        self.finished.notify()
 
 class Waitable(Command):
-    finished = Signal()
+    finished = None
 
-    def __init__(self, action: Callable[[Any], bool], waitable: Signal, *params, parent: Optional[QObject]=None):
-        super().__init__(parent)
+    def __init__(self, action: Callable[[Any], bool], waitable: Event, *params):
+        self.finished = Event()
         self._connected = False
         self._waitable = waitable
         self._action = action
@@ -64,10 +66,10 @@ class Waitable(Command):
 
     def execute(self):
         if self._connected:
-            self._waitable.disconnect(self.finish)
+            self._waitable.unsubscribe(self.finish)
 
         if self._action(*self._params):
-            self._waitable.connect(self.finish)
+            self._waitable.subscribe(self.finish)
             self._connected = True
         else:
             self.finish()
@@ -77,23 +79,21 @@ class Waitable(Command):
 
     def finish(self):
         if self._connected:
-            self._waitable.disconnect(self.finish)
+            self._waitable.unsubscribe(self.finish)
             self._connected = False
 
-        self.finished.emit()
+        self.finished.notify()
 
     def __repr__(self):
         return f'WaitableCommand({self._action}({self._params})'
 
 class UnitMove(Command):
-    finished = Signal()
+    finished = None
 
-    def __init__(self, unit: models.Unit, destination: Coordinate, animation_ended: Signal,
-        parent: Optional[QObject]=None):
-
-        super().__init__(parent)
+    def __init__(self, unit: models.Unit, destination: Coordinate, animation_ended: Event):
         self._animation_ended = animation_ended
         self._destination = destination
+        self.finished = Event()
         self._interrupt = False
         self._connected = False
         self._unit = unit
@@ -103,7 +103,7 @@ class UnitMove(Command):
 
     def execute(self):
         if self._connected:
-            self._animation_ended.disconnect(self.execute)
+            self._animation_ended.unsubscribe(self.execute)
             self._connected = False
 
         if self._interrupt or self._unit.position.equals(self._destination):
@@ -116,11 +116,11 @@ class UnitMove(Command):
 
             if prev_direction != new_direction:
                 self._unit.turn(new_direction)
-                self._animation_ended.connect(self.execute)
+                self._animation_ended.subscribe(self.execute)
                 self._connected = True
 
             elif self._unit.move(new_direction):
-                self._animation_ended.connect(self.execute)
+                self._animation_ended.subscribe(self.execute)
                 self._connected = True
             else:
                 self.finish()
@@ -129,7 +129,7 @@ class UnitMove(Command):
 
     def finish(self):
         self._unit.path_completed.notify()
-        self.finished.emit()
+        self.finished.notify()
 
     def __repr__(self):
         return f'UnitMoveCommand({self._unit}({self._destination})'
@@ -141,7 +141,7 @@ class Chain:
         self._running = False
 
     def add(self, command: Command):
-        command.finished.connect(self._next)
+        command.finished.subscribe(self._next)
         self._commands.append(command)
 
     def is_running(self) -> bool:
@@ -180,7 +180,7 @@ class Chain:
             current.interrupt()
 
     def _next(self):
-        self.current().finished.disconnect(self._next)
+        self.current().finished.unsubscribe(self._next)
         try:
             next_ = self._commands[self._current_index + 1]
             self._current_index += 1

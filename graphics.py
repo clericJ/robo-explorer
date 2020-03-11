@@ -6,7 +6,7 @@ from PySide2.QtGui import QPixmap, QPainter, QWheelEvent, QMouseEvent, QSurfaceF
 from PySide2.QtOpenGL import QGL, QGLWidget, QGLFormat
 from PySide2.QtSvg import QSvgRenderer
 from PySide2.QtWidgets import QGraphicsItem, QWidget, QStyleOptionGraphicsItem, QGraphicsObject, QGraphicsView, \
-    QOpenGLWidget
+    QOpenGLWidget, QFrame
 
 import resources as rc
 from core import Directions, UnitState, StateMachine
@@ -200,6 +200,7 @@ class ScalableGraphicsView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.NoAnchor)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFrameShape(QFrame.NoFrame)
 
         self._scheduled_scalings = 0
         self._mouse_position = None

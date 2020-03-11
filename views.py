@@ -10,17 +10,18 @@ import config
 import models
 import overlays
 import resources as rc
-from core import Directions, UnitState, AutoDisconnector, Coordinate
+from core import Directions, UnitState, AutoDisconnector, Coordinate, Event
 from graphics import Tile, AnimatedSprite
 
 class Unit(AnimatedSprite):
-    animation_ended = Signal()
+    animation_ended = None
 
     def __init__(self, model: models.Unit, controller, size, parent: Optional[QGraphicsItem]=None):
         super().__init__(parent)
 
         self.model = model
         self.controller = controller
+        self.animation_ended = Event()
 
         self.model.path_completed.subscribe(self._stand)
         self.model.turned.subscribe(self._turn)
@@ -33,6 +34,7 @@ class Unit(AnimatedSprite):
 
         self.setPos(model.x * size, model.y * size)
         self.load_states(self.model.name, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
+        self._moving = None
         self._stand()
 
     @property
@@ -107,14 +109,14 @@ class Unit(AnimatedSprite):
         moving.setDuration(math.ceil(config.DEFAULT_MOVE_ANIMATION_SPEED / self.model.speed.value))
         moving.setEndValue(QPointF(self.model.x * self._sprite_size, self.model.y * self._sprite_size))
         moving.setStartValue(self.pos())
-        moving.finished.connect(self.animation_ended.emit)
+        moving.finished.connect(self.animation_ended.notify)
 
         moving.start(QPropertyAnimation.DeleteWhenStopped)
         self.animations.switch((UnitState.move, None, direction))
 
     def _turn(self, old: Directions, new: Directions):
         animation = self.animations.switch((UnitState.turn, old, new))
-        AutoDisconnector(animation.finished, self.animation_ended.emit, self)
+        AutoDisconnector(animation.finished, self.animation_ended.notify, self)
 
     def _stand(self):
         self.animations.switch((UnitState.stand, None, self.model.direction))

@@ -8,7 +8,6 @@ import views
 from core import Coordinate
 from graphics import GameGraphicsView
 
-
 class Unit:
     def __init__(self, model: models.Unit):
         self._command_chain = commands.Chain()
@@ -64,52 +63,25 @@ class Field:
             unit.controller.move(cell.model.position)
 
 def test(argv):
-    from PySide2.QtWidgets import QWidget, QApplication, QGridLayout
-
-    class Window(QWidget):
-        def __init__(self, parent=None):
-            super().__init__(parent)
-
-            self.setMouseTracking(True)
-            field_model = models.Field(10, 10)
-            field_model.load(open('maps/test2.txt', 'r'))
-
-            field_controller = Field(field_model)
-            self.main_view = GameGraphicsView()
-
-            scene = views.Field(field_model, field_controller, config.DEFAULT_SQUARE_SIZE, parent=self)
-            field_controller.set_view(scene)
-            self.main_view.setScene(scene)
-
-            red17 = models.Unit('red17', scene.model, Coordinate(0, 1), models.Speed.fast)
-            red17_2 = models.Unit('red17', scene.model, Coordinate(4, 4), models.Speed.medium)
-            field_controller.add_unit(red17)
-            field_controller.add_unit(red17_2)
-
-            layout = QGridLayout()
-            layout.addWidget(self.main_view)
-            self.setLayout(layout)
+    from PySide2.QtWidgets import QApplication
 
     app = QApplication(argv)
-    window = Window()
-    window.showMaximized()
+    field_model = models.Field(10, 10)
+    field_model.load(open('maps/test2.txt', 'r'))
+    field_controller = Field(field_model)
 
-    # field_model = models.Field(10, 10)
-    # field_model.load(open('maps/test.txt', 'r'))
-    # field_controller = Field(field_model)
-    # scene_view = views.Field(field_model, field_controller, config.DEFAULT_SQUARE_SIZE)
-    # field_controller.set_view(scene_view)
-    # scene_view.setScene(QGraphicsScene())
-    #
-    # red17 = models.Unit('red17',  scene_view.model, Coordinate(0, 1), models.Speed.medium)
-    # red17_2 = models.Unit('red17', scene_view.model, Coordinate(4, 4), models.Speed.medium)
-    # field_controller.add_unit(red17)
-    # field_controller.add_unit(red17_2)
-    #
-    # scene_view.showMaximized()
-    # scene_view.windowHandle().setFlags(Qt.FramelessWindowHint)
-    # scene_view.windowHandle().showFullScreen()
+    main_view = GameGraphicsView()
+    scene = views.Field(field_model, field_controller, config.DEFAULT_SQUARE_SIZE)
+    field_controller.set_view(scene)
+    main_view.setScene(scene)
 
+    red17 = models.Unit('red17',  scene.model, Coordinate(0, 1), models.Speed.medium)
+    red17_2 = models.Unit('red17', scene.model, Coordinate(4, 4), models.Speed.medium)
+    field_controller.add_unit(red17)
+    field_controller.add_unit(red17_2)
+
+    #main_view.showFullScreen()
+    main_view.show()
     return app.exec_()
 
 if __name__ == '__main__':
