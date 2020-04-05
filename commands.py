@@ -21,11 +21,11 @@ class Command(ABC):
         pass
 
 class TriggerBased(Command):
-    finished = None
+    finished = None # ()
 
     def __init__(self, action: Callable[[], bool], trigger: Event):
         self.finished = Event()
-        self._connected = False
+        self._subscribed = False
         self._interrupt = False
         self._trigger = trigger
         self._action = action
@@ -34,12 +34,12 @@ class TriggerBased(Command):
         self._interrupt = True
 
     def is_running(self) -> bool:
-        return self._connected
+        return self._subscribed
 
     def execute(self):
-        if self._connected:
+        if self._subscribed:
             self._trigger.unsubscribe(self.execute)
-            self._connected = False
+            self._subscribed = False
 
         if self._interrupt:
             self._interrupt = False
@@ -47,7 +47,7 @@ class TriggerBased(Command):
 
         elif self._action():
             self._trigger.subscribe(self.execute)
-            self._connected = True
+            self._subscribed = True
         else:
             self.finish()
 
@@ -55,22 +55,22 @@ class TriggerBased(Command):
         self.finished.notify()
 
 class Waitable(Command):
-    finished = None
+    finished = None # ()
 
     def __init__(self, action: Callable[[Any], bool], waitable: Event, *params):
         self.finished = Event()
-        self._connected = False
+        self._subscribed = False
         self._waitable = waitable
         self._action = action
         self._params = params
 
     def execute(self):
-        if self._connected:
+        if self._subscribed:
             self._waitable.unsubscribe(self.finish)
 
         if self._action(*self._params):
             self._waitable.subscribe(self.finish)
-            self._connected = True
+            self._subscribed = True
         else:
             self.finish()
 
@@ -78,9 +78,9 @@ class Waitable(Command):
         pass
 
     def finish(self):
-        if self._connected:
+        if self._subscribed:
             self._waitable.unsubscribe(self.finish)
-            self._connected = False
+            self._subscribed = False
 
         self.finished.notify()
 
@@ -88,23 +88,23 @@ class Waitable(Command):
         return f'WaitableCommand({self._action}({self._params})'
 
 class UnitMove(Command):
-    finished = None
+    finished = None # ()
 
     def __init__(self, unit: models.Unit, destination: Coordinate, animation_ended: Event):
         self._animation_ended = animation_ended
         self._destination = destination
         self.finished = Event()
         self._interrupt = False
-        self._connected = False
+        self._subscribed = False
         self._unit = unit
 
     def interrupt(self):
         self._interrupt = True
 
     def execute(self):
-        if self._connected:
+        if self._subscribed:
             self._animation_ended.unsubscribe(self.execute)
-            self._connected = False
+            self._subscribed = False
 
         if self._interrupt or self._unit.position.equals(self._destination):
             self._interrupt = False
@@ -117,11 +117,11 @@ class UnitMove(Command):
             if prev_direction != new_direction:
                 self._unit.turn(new_direction)
                 self._animation_ended.subscribe(self.execute)
-                self._connected = True
+                self._subscribed = True
 
             elif self._unit.move(new_direction):
                 self._animation_ended.subscribe(self.execute)
-                self._connected = True
+                self._subscribed = True
             else:
                 self.finish()
         else:

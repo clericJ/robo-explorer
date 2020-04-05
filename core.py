@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Hashable, Optional, Callable, List, Tuple
+from typing import Any, Hashable, Optional, Callable, List, Generic, TypeVar
 
 from PySide2.QtCore import QObject, Signal
 
@@ -124,3 +124,36 @@ class AutoDisconnector(QObject):
         self._before()
         self._finished_signal.disconnect(self.final)
 
+T = TypeVar('T')
+class Container(Generic[T]):
+    placed = None # T
+    removed = None # T
+
+    def __init__(self):
+        self._item: Optional[T] = None
+        self.removed = Event()
+        self.placed = Event()
+
+    @property
+    def item(self) -> Optional[T]:
+        return self._item
+
+    def is_empty(self) -> bool:
+        return self._item is None
+
+    def put(self, item: T):
+        if self.item:
+            raise ValueError
+
+        self._item = item
+        self.placed.notify(item)
+
+    def remove(self) -> T:
+        if not self._item:
+            raise ValueError
+
+        item = self._item
+        self._item = None
+        self.removed.notify(item)
+
+        return item

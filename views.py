@@ -2,7 +2,7 @@ import math
 from typing import Optional, Iterable, List
 
 from PySide2.QtCore import QObject, QRectF, QPointF, QPropertyAnimation, Qt, Signal, QByteArray
-from PySide2.QtGui import QPainter, QPixmap, QMouseEvent, QBrush, QTransform, QPainterPath
+from PySide2.QtGui import QPainter, QPixmap, QBrush, QTransform, QPainterPath
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneHoverEvent, \
     QStyleOptionGraphicsItem, QWidget, QGraphicsScene, QGraphicsSceneMouseEvent
 
@@ -18,6 +18,7 @@ class Unit(AnimatedSprite):
 
     def __init__(self, model: models.Unit, controller, size, parent: Optional[QGraphicsItem]=None):
         super().__init__(parent)
+        self.setFlag(Unit.ItemIsSelectable)
 
         self.model = model
         self.controller = controller
@@ -33,16 +34,16 @@ class Unit(AnimatedSprite):
         self._selected = False
 
         self.setPos(model.x * size, model.y * size)
-        self.load_states(self.model.name, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
-        self._moving = None
+        self.load_states(self.model.resource, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
         self._stand()
 
     @property
     def element_size(self) -> int:
         return self._sprite_size
 
-    def boundingRect(self) -> QRectF:
-        return QRectF(0, 0, self._sprite_size, self._sprite_size)
+    @property
+    def selected(self) -> bool:
+        return self._selected
 
     def select(self):
         self.model.route_calculated.subscribe(self.draw_path)
@@ -61,7 +62,7 @@ class Unit(AnimatedSprite):
 
     def draw_path(self, start: Coordinate, finish: Coordinate, route: Iterable[Directions]):
         self.clear_path()
-        path = self.get_graphic_path(start, finish, route)
+        path = self._get_graphic_path(start, finish, route)
         self._path_list.append(path)
         self.scene().add_unit_path(path)
 
@@ -71,7 +72,7 @@ class Unit(AnimatedSprite):
 
         self._path_list = []
 
-    def get_graphic_path(self, start: Coordinate, finish: Coordinate, route: Iterable[Directions]) -> QPainterPath:
+    def _get_graphic_path(self, start: Coordinate, finish: Coordinate, route: Iterable[Directions]) -> QPainterPath:
         def generate_half_size_rect(point):
             return QRectF(point.x() + self._sprite_size / 4, point.y() + self._sprite_size / 4,
                           self._sprite_size / 2, self._sprite_size / 2)
@@ -95,9 +96,8 @@ class Unit(AnimatedSprite):
         path.addEllipse(generate_half_size_rect(finish_point))
         return path
 
-    @property
-    def selected(self) -> bool:
-        return self._selected
+    def boundingRect(self) -> QRectF:
+        return QRectF(0, 0, self._sprite_size, self._sprite_size)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
         self.overlays.draw(painter, overlays.PaintOrder.prev)
@@ -107,8 +107,8 @@ class Unit(AnimatedSprite):
     def _move(self, direction: Directions):
         moving = QPropertyAnimation(self, QByteArray(bytes('pos', 'utf-8')), self)
         moving.setDuration(math.ceil(config.DEFAULT_MOVE_ANIMATION_SPEED / self.model.speed.value))
-        moving.setEndValue(QPointF(self.model.x * self._sprite_size, self.model.y * self._sprite_size))
         moving.setStartValue(self.pos())
+        moving.setEndValue(QPointF(self.model.x * self._sprite_size, self.model.y * self._sprite_size))
         moving.finished.connect(self.animation_ended.notify)
 
         moving.start(QPropertyAnimation.DeleteWhenStopped)
@@ -123,21 +123,23 @@ class Unit(AnimatedSprite):
         self.clear_path()
 
 class Cell(Tile):
-    def __init__(self, model: models.Cell, size, parent: Optional[QGraphicsItem] = None):
+    def __init__(self, model: models.Cell, size: int, parent: Optional[QGraphicsItem]=None):
 
-        tile = QPixmap(rc.get_tile(model.surface.name)).scaledToHeight(size, mode=Qt.SmoothTransformation)
+        filename = config.SURFACE_NAME_TEMPLATE.format(model.surface.resource, model.surface.id)
+        tile = QPixmap(rc.get_tile(filename)).scaledToHeight(size, mode=Qt.SmoothTransformation)
         super().__init__(tile, size, parent)
+
         self.setAcceptHoverEvents(True)
         self.overlays = overlays.Map()
         self.model = model
 
     def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
-        size = self.boundingRect().size()
-        #self.overlays.add(overlays.Pixmap(overlays.Names.cursor_move, size, overlays.PaintOrder.post))
+        color = rc.PASSABLE_CURSOR_COLOR if self.model.passable else rc.IMPASSABLE_CURSOR_COLOR
+        self.overlays.add(overlays.Backlight(color, self.boundingRect(), overlays.PaintOrder.post))
         super().hoverEnterEvent(event)
 
     def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent):
-        #self.overlays.remove(self.overlays.get(overlays.Names.cursor_move))
+        self.overlays.remove_by_type(overlays.Backlight)
         super().hoverEnterEvent(event)
 
     def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
@@ -150,14 +152,13 @@ class Cell(Tile):
 
 class Field(QGraphicsScene):
     cell_activated = Signal(Cell)
-    unit_selected = Signal(Unit)
+    units_selected = Signal(list)
     selection_cleared = Signal()
 
     def __init__(self, model: models.Field, controller, elements_size: int, parent: Optional[QObject]=None):
         super().__init__(parent)
         self.setBackgroundBrush(QBrush(rc.FIELD_BACKGROUND_COLOR))
 
-        self._unit_selected = False
         self._units_path: List[QPainterPath] = []
         self._elements_size = elements_size
         self.controller = controller
@@ -190,27 +191,22 @@ class Field(QGraphicsScene):
 
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
         if event.button() == Qt.LeftButton:
-            if item := self.itemAt(event.scenePos(), QTransform()):
+            if units := self.selectedItems():
 
+                self.remove_selection()
+                for unit in units:
+                    unit.select()
+
+                self.units_selected.emit(units)
+
+            elif item := self.itemAt(event.scenePos(), QTransform()):
                 if isinstance(item, Cell):
                     self.cell_activated.emit(item)
 
-                elif isinstance(item, Unit):
-                    self.remove_selection()
-                    item.select()
-                    self._unit_selected = True
-                    self.unit_selected.emit(item)
-
         elif event.button() == Qt.RightButton:
-            self._unit_selected = False
             self.remove_selection()
 
         super().mouseReleaseEvent(event)
-
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if item := self.itemAt(event.scenePos(), QTransform()):
-            pass
-        super().mouseMoveEvent(event)
 
     def remove_selection(self):
         cleared = False

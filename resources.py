@@ -1,16 +1,17 @@
 import os
 from typing import Optional
 
-from PySide2.QtGui import QColor, QPen, Qt
+from PySide2.QtGui import QColor, QPen, QBrush, Qt
 
 from models import Directions
 from core import UnitState
 import config
 
 FIELD_BACKGROUND_COLOR = QColor(30, 30, 30)
-PASSABLE_CURSOR_COLOR = QColor(10, 150, 10, 100)
-IMPASSABLE_CURSOR_COLOR = QColor(150, 10, 10, 100)
-PATH_PEN = QPen(QColor(255, 255, 255, 150), 10, Qt.SolidLine)
+PASSABLE_CURSOR_COLOR = QColor(100, 200, 100, 50)
+IMPASSABLE_CURSOR_COLOR = QColor(150, 150, 150, 50)
+PATH_PEN = QPen(QColor(255, 255, 255, 100), 10, Qt.SolidLine)
+RUBBER_BAND_BRUSH = QBrush(QColor(100, 100, 100))
 
 def get_resource(path: str) -> str:
     result = os.path.normpath(path)

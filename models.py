@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import io
-import os
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Optional, List
 
 import config
 import surfaces
-from core import Coordinate, Directions, Event
+from core import Coordinate, Directions, Event, Container
 
 class HavingPosition(ABC):
     @property
@@ -43,23 +42,29 @@ class Unit(HavingPosition):
     route_calculated = None # (start: Coordinate, finish: Coordinate, route: Iterable[Directions])
     path_completed = None # ()
 
-    def __init__(self, name: str, field: Field, position: Coordinate,
+    def __init__(self, name: str, resource: str, field: Field, position: Coordinate,
                  speed: Speed = Speed.medium, direction: Directions = Directions.east):
         self.moved = Event()
         self.turned = Event()
         self.route_calculated = Event()
         self.path_completed = Event()
+        self._original_speed = speed
         self._direction = direction
         self._position = position
+        self._resource = resource
         self._field = field
         self._speed = speed
         self._name = name
 
-        self.field.at_point(position).put(self)
+        self.field.at_point(position).unit_container.put(self)
 
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def resource(self) -> str:
+        return self._resource
 
     @property
     def x(self) -> int:
@@ -106,8 +111,13 @@ class Unit(HavingPosition):
         destination: Cell = self.field.at_point(new_position)
 
         if destination and destination.passable:
-            self.field.at_point(self.position).remove()
-            destination.put(self)
+            self.field.at_point(self.position).unit_container.remove()
+            self._speed = self._original_speed
+
+            destination.unit_container.put(self)
+            if destination.surface.speed != 0:
+                self._speed = (self._speed.speed_up()
+                               if destination.surface.speed > 0 else self._speed.slow_down())
 
             self._position = new_position
             self.moved.notify(direction)
@@ -185,25 +195,90 @@ class Unit(HavingPosition):
 
         return result[1:]
 
+class Structure:
+
+    def __init__(self, name: str, resource: str, place: List[Coordinate],
+                 passable: bool, direction: Directions=Directions.east):
+
+        self._start_pos: Optional[Coordinate] = None
+        self._direction = direction
+        self._passable = passable
+        self._is_placed = False
+        self._place = place
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def direction(self) -> Directions:
+        return self._direction
+
+    @property
+    def passable(self) -> bool:
+        return self._passable
+
+    def is_placed(self):
+        return self._is_placed
+
+    def place(self, field: Field, position: Coordinate, direction: Directions) -> bool:
+        if self._is_placed:
+            raise ValueError
+
+        result = False
+
+        for point in self._place:
+            cell = field.at_point(point + position)
+
+            if not cell.can_build:
+                break
+        else:
+            for point in self._place:
+                cell = field.at_point(point + position)
+                cell.struct_container.put(self)
+
+            self._is_placed = True
+            self._direction = direction
+            self._start_pos = position
+            result = True
+
+        return result
+
+    def destroy(self, field: Field) -> Optional[Item]:
+        for point in self._place:
+            cell = field.at_point(self._start_pos + point)
+            cell.struct_container.remove()
+
+        return None
+
+class Item:
+
+    def __init__(self, name: str, quantity: int=1):
+        self._quantity = quantity
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def quantity(self) -> int:
+        return self._quantity
+
 class Cell(HavingPosition):
-    placed: Event = None  # unit: Unit
-    removed: Event = None  # unit: Unit
 
     def __init__(self, surface: surfaces.Surface, position: Coordinate):
-        self.placed = Event()
-        self.removed = Event()
-        self._surface = surface
+        super().__init__()
+        self.struct_container: Container[Structure] = Container()
+        self.unit_container: Container[Unit] = Container()
+        self.item_container: Container[Item] = Container()
         self._position = position
-        self._original_bot_speed = None
-        self._bot = None
+        self._surface = surface
 
     @property
     def surface(self):
         return self._surface
-
-    @property
-    def is_occupied(self) -> bool:
-        return self._bot is not None
 
     @property
     def x(self) -> int:
@@ -219,41 +294,19 @@ class Cell(HavingPosition):
 
     @property
     def passable(self) -> bool:
-        result = True
-        if not self.surface.passable or self.is_occupied:
-            result = False
-        return result
+        return (self.surface.passable
+                and self.unit_container.is_empty()
+                and (self.struct_container.is_empty() or not self.struct_container.item.passable))
 
     @property
-    def unit(self) -> Optional[Unit]:
-        return self._bot
-
-    def put(self, unit: Unit):
-        if self.is_occupied:
-            raise ValueError
-
-        if self.surface.speed != 0:
-            self._original_bot_speed = unit.speed
-            unit.speed = unit.speed.speed_up() if self.surface.speed > 0 else unit.speed.slow_down()
-
-        self._bot = unit
-        self.placed.notify(unit)
-
-    def remove(self) -> Unit:
-        if not self.is_occupied:
-            raise ValueError
-
-        unit = self._bot
-        if self.surface.speed != 0:
-            unit.speed = self._original_bot_speed
-
-        self._bot = None
-        self.removed.notify(unit)
-
-        return unit
+    def can_build(self) -> bool:
+        return (self.surface.type == surfaces.Type.hard
+                and self.struct_container.is_empty()
+                and self.item_container.is_empty()
+                and self.unit_container.is_empty())
 
     def __repr__(self):
-        return f'Cell({self.surface.name})'
+        return f'Cell({self.surface.resource})'
 
 class Field:
     def __init__(self, width: int, height: int):
@@ -286,76 +339,19 @@ class Field:
 
         for y, line in enumerate(lines):
             for x, cell_name in enumerate(line.split(config.TAB_LITERAL)):
-                self._matrix[y][x] = Cell(surfaces.BY_NAME[cell_name.strip()], Coordinate(x, y))
+                name, id_ = cell_name.strip().split(config.SURFACE_NAME_DELIMITER)
+                surface = surfaces.BY_RESOURCE_NAME[name]
+                surface.id = int(id_)
+
+                self._matrix[y][x] = Cell(surface, Coordinate(x, y))
 
     def dump(self, stream: io.TextIOBase):
         for y in range(self.height):
-            stream.write(config.TAB_LITERAL.join(i.surface.name for i in self._matrix[y]))
+            stream.write(config.TAB_LITERAL.join(
+                config.SURFACE_NAME_TEMPLATE.format(i.surface.name, i.surface.id) for i in self._matrix[y]))
+
             stream.write(config.NL_LITERAL)
 
     @staticmethod
     def _create_empty_matrix(width: int, height: int) -> List[List]:
         return [[Cell(surfaces.empty, Coordinate(i, j)) for i in range(width)] for j in range(height)]
-
-def test():
-    from PySide2.QtCore import QObject
-
-    class BotView:
-
-        direction_sprites = {
-            Directions.south: 'v',
-            Directions.north: '^',
-            Directions.east: '>',
-            Directions.west: '<'}
-
-        def __init__(self, unit: Unit):
-            self._unit = unit
-
-        def get_sprite(self):
-            return self.direction_sprites[self._unit.direction]
-
-    class FieldView:
-        def __init__(self, field: Field):
-            self._field = field
-
-        @property
-        def field(self):
-            return self._field
-
-        def update(self):
-            QObject().thread().usleep(1000 * 1000 * 1)
-            os.system('cls')
-
-            line = []
-            for y in range(self.field.height):
-                for x in range(self.field.width):
-                    if self.field.at(x, y).is_occupied:
-                        line.append(BotView.direction_sprites[self.field.at(x, y).unit.direction])
-                    else:
-                        line.append(str(int(not self.field.at(x, y).passable)))
-
-                print(config.SPACE_LITERAL.join(line))
-                line.clear()
-
-    os.system('cls')
-
-    field = Field(10, 10)
-    field_view = FieldView(field)
-    # field.dump(open('maps/test.txt', 'w'))
-    field.load(open('maps/test.txt', 'r'))
-
-    player = Unit('player', field, Coordinate(0, 1))
-    player.moved.subscribe(lambda x: print(f'moved to {x.name}'))
-    player.turned.subscribe(lambda x, y: print(f'turned from {x.name} to {y.name}'))
-    path = player.generate_path(Coordinate(8, 5))
-
-    field_view.update()
-    if path:
-        for next_step in path:
-            player.move(next_step)
-            field_view.update()
-            # print(next_step)
-
-
-if __name__ == '__main__':
-    test()

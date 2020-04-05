@@ -3,13 +3,15 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Tuple, Optional, Hashable
 
-from PySide2.QtCore import QSize, QLineF
-from PySide2.QtGui import QPixmap, QPainter, Qt, QPicture
+from PySide2.QtCore import QSize, QLineF, QRectF
+from PySide2.QtGui import QPixmap, QPainter, Qt, QPicture, QColor, QBrush
 
 import resources as rc
 from core import Directions
 
 IMMORTAL = -1
+
+# TODO: возможно переписать оверлеи, относледовав их от QGraphicsEffect
 
 class PaintOrder(Enum):
     prev = 0
@@ -58,6 +60,30 @@ class Overlay(ABC):
     def draw(self, painter: QPainter, x: int=0, y: int=0) -> bool:
         pass
 
+class Backlight(Overlay):
+    def __init__(self, color: QColor, rect: QRectF, order: PaintOrder, lifetime=IMMORTAL):
+        super().__init__(order, lifetime)
+        self._color = color
+        self._rect = rect
+
+    def id(self):
+        return id(self)
+
+    def draw(self, painter: QPainter, x: int=0, y: int=0) -> bool:
+        result = False
+
+        if self._lifetime == IMMORTAL or self._lifetime > 0:
+            painter.setPen(Qt.NoPen)
+            painter.setRenderHint(painter.Antialiasing)
+            painter.setBrush(QBrush(self._color))
+            painter.drawRoundedRect(self._rect, 45, 45)
+            result = True
+
+            if self._lifetime != IMMORTAL:
+                self._lifetime -= 1
+
+        return result
+
 class Path(Overlay):
     def __init__(self, path: PathDirections, size: QSize, order: PaintOrder, lifetime=IMMORTAL):
         super().__init__(order, lifetime)
@@ -68,7 +94,6 @@ class Path(Overlay):
 
     @property
     def id(self) -> Hashable:
-        result = None
         if self._path.to:
             if self._path.from_:
                 result = self._path.from_.name + self._path.to.name
@@ -109,13 +134,55 @@ class Path(Overlay):
             painter.drawLine(lines[self._path.from_])
         else:
             width, height = self._size.width(), self._size.height()
-            painter.drawEllipse(width / 4, height / 4, width / 2, height / 2)
+            painter.drawEllipse(width // 4, height // 4, width // 2, height // 2)
         if self._path.to:
             painter.drawLine(lines[self._path.to])
         else:
             width, height = self._size.width(), self._size.height()
-            painter.drawEllipse(width / 4, height / 4, width / 2, height / 2)
+            painter.drawEllipse(width // 4, height // 4, width // 2, height // 2)
         painter.end()
+
+# class Cursor(QGraphicsEffect):
+#
+#     def __init__(self, resource: Names, parent: Optional[QObject]=None):
+#         super().__init__(parent)
+#         self._scaled = False
+#         self._pixmap = QPixmap(rc.get_overlay(resource.name))
+#
+#     def draw(self, painter: QPainter):
+#
+#         if not self._scaled:
+#             rect = self.sourceBoundingRect()
+#             self._pixmap = self._pixmap.scaled(rect.width(), rect.height(), mode=Qt.SmoothTransformation)
+#             self._scaled = True
+#
+#         self.drawSource(painter)
+#         painter.drawPixmap(0, 0, self._pixmap)
+#
+#     def boundingRectFor(self, rect: QRectF):
+#         return rect
+#
+# class Backlight(QGraphicsEffect):
+#
+#     def __init__(self, parent: Optional[QObject]=None):
+#         super().__init__(parent)
+#         self._color: Optional[QColor] = None
+#
+#     def set_color(self, color: QColor):
+#         self._color = color
+#
+#     def draw(self, painter: QPainter):
+#         self.drawSource(painter)
+#
+#         painter.save()
+#         painter.setPen(Qt.NoPen)
+#         painter.setBrush(QBrush(self._color))
+#
+#         painter.drawRoundedRect(self.sourceBoundingRect(), 45, 45)
+#         painter.restore()
+#
+#     def boundingRectFor(self, rect: QRectF):
+#         return rect
 
 class Pixmap(Overlay):
 

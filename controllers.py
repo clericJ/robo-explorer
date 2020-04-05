@@ -1,12 +1,9 @@
-import sys
-from typing import Optional, Iterable
+from typing import Optional, Iterable, List
 
 import commands
-import config
 import models
 import views
 from core import Coordinate
-from graphics import GameGraphicsView
 
 class Unit:
     def __init__(self, model: models.Unit):
@@ -33,14 +30,14 @@ class Unit:
 
 class Field:
     def __init__(self, model: models.Field):
-        self._active_unit: Optional[views.Unit] = None
+        self._active_units: List[views.Unit] = []
         self.view: Optional[views.Field] = None
         self.model = model
 
     def set_view(self, view: views.Field):
-        view.unit_selected.connect(self.set_active_unit)
+        view.units_selected.connect(self.set_active_units)
         view.cell_activated.connect(self.activate_cell)
-        view.selection_cleared.connect(self.clear_active_unit)
+        view.selection_cleared.connect(self.clear_active_units)
         self.view = view
 
     def add_unit(self, model: models.Unit):
@@ -49,40 +46,15 @@ class Field:
         controller.set_view(view)
         self.view.add_unit(view)
 
-    def get_active_unit(self) -> Optional[views.Unit]:
-        return self._active_unit
+    def get_active_units(self) -> List[views.Unit]:
+        return self._active_units
 
-    def set_active_unit(self, unit: views.Unit):
-        self._active_unit = unit
+    def set_active_units(self, units: List[views.Unit]):
+        self._active_units = units
 
-    def clear_active_unit(self):
-        self._active_unit = None
+    def clear_active_units(self):
+        self._active_units = []
 
     def activate_cell(self, cell: views.Cell):
-        if unit := self.get_active_unit():
+        for unit in self.get_active_units():
             unit.controller.move(cell.model.position)
-
-def test(argv):
-    from PySide2.QtWidgets import QApplication
-
-    app = QApplication(argv)
-    field_model = models.Field(10, 10)
-    field_model.load(open('maps/test2.txt', 'r'))
-    field_controller = Field(field_model)
-
-    main_view = GameGraphicsView()
-    scene = views.Field(field_model, field_controller, config.DEFAULT_SQUARE_SIZE)
-    field_controller.set_view(scene)
-    main_view.setScene(scene)
-
-    red17 = models.Unit('red17',  scene.model, Coordinate(0, 1), models.Speed.medium)
-    red17_2 = models.Unit('red17', scene.model, Coordinate(4, 4), models.Speed.medium)
-    field_controller.add_unit(red17)
-    field_controller.add_unit(red17_2)
-
-    #main_view.showFullScreen()
-    main_view.show()
-    return app.exec_()
-
-if __name__ == '__main__':
-    sys.exit(test(sys.argv))

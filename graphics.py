@@ -1,15 +1,16 @@
 import math
-from typing import Optional
+from typing import Optional, List
 
 from PySide2.QtCore import QRect, QTimer, Qt, QPoint, Signal, QObject, QRectF, QPointF, QTimeLine
-from PySide2.QtGui import QPixmap, QPainter, QWheelEvent, QMouseEvent, QSurfaceFormat
+from PySide2.QtGui import QPixmap, QPainter, QWheelEvent, QMouseEvent, QSurfaceFormat, QPalette
 from PySide2.QtOpenGL import QGL, QGLWidget, QGLFormat
 from PySide2.QtSvg import QSvgRenderer
 from PySide2.QtWidgets import QGraphicsItem, QWidget, QStyleOptionGraphicsItem, QGraphicsObject, QGraphicsView, \
-    QOpenGLWidget, QFrame
+    QOpenGLWidget, QFrame, QGraphicsPixmapItem
 
 import resources as rc
 from core import Directions, UnitState, StateMachine
+
 
 class Tile(QGraphicsItem):
     def __init__(self, sprite: QPixmap, size, parent: Optional[QGraphicsItem]=None):
@@ -47,16 +48,19 @@ class FrameAnimation(QObject):
     frame_updated = Signal()
     finished = Signal()
 
-    def __init__(self, sprite: QPixmap, frames_per_second: int, parent: Optional[QObject] = None):
+    def __init__(self, sprite_sheet: QPixmap, frames_per_second: int, parent: Optional[QObject] = None):
 
         super().__init__(parent)
-        self._sprite = sprite
         self._current_frame = 0
-        self._frame_count = self._sprite.width() // self._sprite.height()
+        self._frames: List[QPixmap] = []
+        self._frame_count = sprite_sheet.width() // sprite_sheet.height()
         self._frames_per_second = frames_per_second
+
         self._animation_timer = QTimer()
         self._animation_timer.setTimerType(Qt.PreciseTimer)
         self._animation_timer.timeout.connect(self._update_frame)
+
+        self._cut(sprite_sheet)
 
     @property
     def frame_count(self) -> int:
@@ -66,12 +70,11 @@ class FrameAnimation(QObject):
     def frames_per_second(self) -> int:
         return self._frames_per_second
 
-    @property
-    def sprite(self) -> QPixmap:
-        return self._sprite
-
-    def get_current_frame(self) -> int:
+    def get_current_frame_number(self) -> int:
         return self._current_frame
+
+    def get_current_frame(self) -> QPixmap:
+        return self._frames[self._current_frame]
 
     def increment_frame(self):
         if self.is_last_frame():
@@ -100,25 +103,34 @@ class FrameAnimation(QObject):
             self._animation_timer.stop()
 
     def draw(self, painter: QPainter):
-        size = self.sprite.height()
-        x = size * self.get_current_frame()
         painter.setRenderHint(painter.SmoothPixmapTransform)
-        painter.drawPixmap(QPoint(0, 0), self.sprite, QRect(x, 0, size, size))
+        painter.drawPixmap(QPoint(0, 0), self.get_current_frame())
 
     @classmethod
-    def load(cls, name: str, state: UnitState, from_: Optional[Directions],
+    def load(cls, resource: str, state: UnitState, from_: Optional[Directions],
              to: Directions, frames_per_second: int, size: int):
-        return cls(QPixmap(rc.get_animated_sprite(name, state, from_, to)
+
+        return cls(QPixmap(rc.get_animated_sprite(resource, state, from_, to)
                     ).scaledToHeight(size, mode=Qt.SmoothTransformation), frames_per_second)
 
     def _update_frame(self):
         self.increment_frame()
         self.frame_updated.emit()
 
-class AnimatedSprite(QGraphicsObject):
+    def _cut(self, pixmap: QPixmap):
+        size = pixmap.height()
+
+        for i in range(0, self._frame_count):
+            self._frames.append(pixmap.copy(QRect(size * i, 0, size, size)))
+
+class AnimatedSprite(QGraphicsObject, QGraphicsPixmapItem):
 
     def __init__(self, parent: Optional[QGraphicsItem] = None):
-        super().__init__(parent)
+
+        QGraphicsObject.__init__(self, parent)
+        QGraphicsPixmapItem.__init__(self, parent)
+        self.setTransformationMode(Qt.SmoothTransformation)
+
         self.animations = StateMachine()
         self.animations.switched.subscribe(self._update_animations)
 
@@ -126,31 +138,43 @@ class AnimatedSprite(QGraphicsObject):
     def current_animation(self) -> Optional[FrameAnimation]:
         return self.animations.get_action()
 
-    def load_states(self, name: str, frames_per_second: int, size: int):
+    def load_states(self, resource: str, frames_per_second: int, size: int):
         for state in UnitState:
             for direction in Directions:
                 if state.requires_prev_direction:
                     other_directions = set(Directions)
                     other_directions.discard(direction)
                     for from_ in other_directions:
-                        animation = FrameAnimation.load(name, state, from_, direction, frames_per_second, size)
+                        animation = FrameAnimation.load(resource, state, from_, direction, frames_per_second, size)
                         self.animations.add((state, from_, direction), animation)
                 else:
-                    animation = FrameAnimation.load(name, state, None, direction, frames_per_second, size)
+                    animation = FrameAnimation.load(resource, state, None, direction, frames_per_second, size)
                     self.animations.add((state, None, direction), animation)
-
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
-        if animation := self.animations.get_action():
-            animation.draw(painter)
 
     def _update_animations(self, previous: Optional[FrameAnimation], next_: FrameAnimation):
         if previous:
-            previous.frame_updated.disconnect(self.update)
+            previous.frame_updated.disconnect(self._set_next_frame)
             previous.stop()
-        next_.frame_updated.connect(self.update)
+
+        next_.frame_updated.connect(self._set_next_frame)
         next_.run()
 
+    def _set_next_frame(self):
+        if animation := self.current_animation:
+            self.setPixmap(animation.get_current_frame())
+            self.update()
+
+class RubberSelectableGraphicsView(QGraphicsView):
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self.setDragMode(QGraphicsView.RubberBandDrag)
+
+        palette = QPalette()
+        palette.setBrush(QPalette.Highlight, rc.RUBBER_BAND_BRUSH)
+        self.setPalette(palette)
+
 # TODO: переписать реализацию, отказаться от таймера слежения за мыщью
+# возможно заменив таймер на signleshot
 class CursorTrackedScrollGraphicsView(QGraphicsView):
     def __init__(self, parent: Optional[QWidget]=None):
         super().__init__(parent)
@@ -230,8 +254,9 @@ class ScalableGraphicsView(QGraphicsView):
             delta = self.mapToScene(self._mouse_position) - old
             self.translate(delta.x(), delta.y())
 
-class UserControlledGraphicsView(CursorTrackedScrollGraphicsView, ScalableGraphicsView):
-    pass
+class UserControlledGraphicsView(CursorTrackedScrollGraphicsView,
+                                 ScalableGraphicsView,
+                                 RubberSelectableGraphicsView): pass
 
 class OpenGLGraphicsView(QGraphicsView):
     def __init__(self, parent: Optional[QWidget]=None):
