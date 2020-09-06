@@ -19,10 +19,10 @@ def main(argv):
     field_controller.set_view(scene)
     main_view.setScene(scene)
 
-    red17 = models.Unit('red17', 'red17', scene.model, Coordinate(0, 1), models.Speed.medium)
-    red17_2 = models.Unit('red17', 'red17', scene.model, Coordinate(4, 4), models.Speed.fast)
-    field_controller.add_unit(red17)
-    field_controller.add_unit(red17_2)
+    red17 = models.Unit('red17', scene.model, Coordinate(0, 1), models.Speed.medium)
+    red17_2 = models.Unit('red17', scene.model, Coordinate(4, 4), models.Speed.fast)
+    field_controller.add_unit(red17, 'red17')
+    field_controller.add_unit(red17_2, 'red17')
 
     #main_view.showFullScreen()
     main_view.show()

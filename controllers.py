@@ -40,9 +40,9 @@ class Field:
         view.selection_cleared.connect(self.clear_active_units)
         self.view = view
 
-    def add_unit(self, model: models.Unit):
+    def add_unit(self, model: models.Unit, resource: str):
         controller = Unit(model)
-        view = views.Unit(model, controller, self.view.elements_size)
+        view = views.Unit(model, resource, controller, self.view.elements_size)
         controller.set_view(view)
         self.view.add_unit(view)
 

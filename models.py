@@ -42,7 +42,7 @@ class Unit(HavingPosition):
     route_calculated = None # (start: Coordinate, finish: Coordinate, route: Iterable[Directions])
     path_completed = None # ()
 
-    def __init__(self, name: str, resource: str, field: Field, position: Coordinate,
+    def __init__(self, name: str, field: Field, position: Coordinate,
                  speed: Speed = Speed.medium, direction: Directions = Directions.east):
         self.moved = Event()
         self.turned = Event()
@@ -51,7 +51,6 @@ class Unit(HavingPosition):
         self._original_speed = speed
         self._direction = direction
         self._position = position
-        self._resource = resource
         self._field = field
         self._speed = speed
         self._name = name
@@ -61,10 +60,6 @@ class Unit(HavingPosition):
     @property
     def name(self) -> str:
         return self._name
-
-    @property
-    def resource(self) -> str:
-        return self._resource
 
     @property
     def x(self) -> int:
@@ -197,7 +192,7 @@ class Unit(HavingPosition):
 
 class Structure:
 
-    def __init__(self, name: str, resource: str, place: List[Coordinate],
+    def __init__(self, name: str, place: List[Coordinate],
                  passable: bool, direction: Directions=Directions.east):
 
         self._start_pos: Optional[Coordinate] = None

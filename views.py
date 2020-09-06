@@ -16,7 +16,7 @@ from graphics import Tile, AnimatedSprite
 class Unit(AnimatedSprite):
     animation_ended = None
 
-    def __init__(self, model: models.Unit, controller, size, parent: Optional[QGraphicsItem]=None):
+    def __init__(self, model: models.Unit, resource: str, controller, size, parent: Optional[QGraphicsItem]=None):
         super().__init__(parent)
         self.setFlag(Unit.ItemIsSelectable)
 
@@ -32,10 +32,15 @@ class Unit(AnimatedSprite):
         self._sprite_size = size
         self._path_list: Optional[List[QPainterPath]] = []
         self._selected = False
+        self._resource = resource
 
         self.setPos(model.x * size, model.y * size)
-        self.load_states(self.model.resource, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
+        self.load_states(self.resource, config.DEFAULT_ANIMATION_SPEED * model.speed.value, self._sprite_size)
         self._stand()
+
+    @property
+    def resource(self) -> str:
+        return self._resource
 
     @property
     def element_size(self) -> int:
