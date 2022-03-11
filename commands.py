@@ -5,6 +5,7 @@ from typing import Optional, List, Callable, Any
 import models
 from core import Coordinate, Event
 
+
 class Command(ABC):
     finished = NotImplemented
 
@@ -20,8 +21,9 @@ class Command(ABC):
     def finish(self):
         pass
 
+
 class TriggerBased(Command):
-    finished = None # ()
+    finished = None  # ()
 
     def __init__(self, action: Callable[[], bool], trigger: Event):
         self.finished = Event()
@@ -54,8 +56,9 @@ class TriggerBased(Command):
     def finish(self):
         self.finished.notify()
 
+
 class Waitable(Command):
-    finished = None # ()
+    finished = None  # ()
 
     def __init__(self, action: Callable[[Any], bool], waitable: Event, *params):
         self.finished = Event()
@@ -87,8 +90,9 @@ class Waitable(Command):
     def __repr__(self):
         return f'WaitableCommand({self._action}({self._params})'
 
+
 class UnitMove(Command):
-    finished = None # ()
+    finished = None  # ()
 
     def __init__(self, unit: models.Unit, destination: Coordinate, animation_ended: Event):
         self._animation_ended = animation_ended
@@ -134,6 +138,7 @@ class UnitMove(Command):
     def __repr__(self):
         return f'UnitMoveCommand({self._unit}({self._destination})'
 
+
 class Chain:
     def __init__(self):
         self._commands: List[Command] = []
@@ -176,7 +181,7 @@ class Chain:
         if current := self.current():
             if self._current_index + 1 < len(self._commands):
                 index = self._commands.index(current)
-                del self._commands[index+1:]
+                del self._commands[index + 1:]
             current.interrupt()
 
     def _next(self):

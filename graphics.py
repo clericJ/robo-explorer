@@ -13,7 +13,7 @@ from core import Directions, UnitState, StateMachine
 
 
 class Tile(QGraphicsItem):
-    def __init__(self, sprite: QPixmap, size, parent: Optional[QGraphicsItem]=None):
+    def __init__(self, sprite: QPixmap, size, parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
         self.sprite = sprite
         self._size = size
@@ -25,9 +25,10 @@ class Tile(QGraphicsItem):
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._size, self._size)
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget] = None):
         painter.setRenderHint(painter.SmoothPixmapTransform)
         painter.drawPixmap(QPoint(0, 0), self.sprite, QRect(0, 0, self._size, self._size))
+
 
 class SVGTile(QGraphicsItem):
     def __init__(self, tile: str, parent: Optional[QGraphicsItem] = None):
@@ -41,8 +42,9 @@ class SVGTile(QGraphicsItem):
     def tile_filename(self) -> str:
         return self._tile
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget] = None):
         self.renderer.render(painter, self.boundingRect())
+
 
 class FrameAnimation(QObject):
     frame_updated = Signal()
@@ -92,7 +94,7 @@ class FrameAnimation(QObject):
     def is_running(self) -> bool:
         return self._animation_timer.isActive()
 
-    def run(self, frame: int = 0, frames_per_second = None):
+    def run(self, frame: int = 0, frames_per_second=None):
         if not self.is_running():
             self._current_frame = frame
             self._frames_per_second = frames_per_second or self.frames_per_second
@@ -111,7 +113,7 @@ class FrameAnimation(QObject):
              to: Directions, frames_per_second: int, size: int):
 
         return cls(QPixmap(rc.get_animated_sprite(resource, state, from_, to)
-                    ).scaledToHeight(size, mode=Qt.SmoothTransformation), frames_per_second)
+                           ).scaledToHeight(size, mode=Qt.SmoothTransformation), frames_per_second)
 
     def _update_frame(self):
         self.increment_frame()
@@ -122,6 +124,7 @@ class FrameAnimation(QObject):
 
         for i in range(0, self._frame_count):
             self._frames.append(pixmap.copy(QRect(size * i, 0, size, size)))
+
 
 class AnimatedSprite(QGraphicsObject, QGraphicsPixmapItem):
 
@@ -164,6 +167,7 @@ class AnimatedSprite(QGraphicsObject, QGraphicsPixmapItem):
             self.setPixmap(animation.get_current_frame())
             self.update()
 
+
 class RubberSelectableGraphicsView(QGraphicsView):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -173,10 +177,11 @@ class RubberSelectableGraphicsView(QGraphicsView):
         palette.setBrush(QPalette.Highlight, rc.RUBBER_BAND_BRUSH)
         self.setPalette(palette)
 
+
 # TODO: переписать реализацию, отказаться от таймера слежения за мыщью
 # возможно заменив таймер на signleshot
 class CursorTrackedScrollGraphicsView(QGraphicsView):
-    def __init__(self, parent: Optional[QWidget]=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
         self._visible_region: Optional[QRectF] = None
@@ -185,7 +190,7 @@ class CursorTrackedScrollGraphicsView(QGraphicsView):
         self._mouse_tracking_timer.timeout.connect(self._scroll_area)
 
     def _scroll_area(self):
-        sensitive_area = 30 # in points
+        sensitive_area = 30  # in points
 
         hscroll = self.horizontalScrollBar()
         vscroll = self.verticalScrollBar()
@@ -216,8 +221,9 @@ class CursorTrackedScrollGraphicsView(QGraphicsView):
 
         super().mouseMoveEvent(event)
 
+
 class ScalableGraphicsView(QGraphicsView):
-    def __init__(self, parent: Optional[QWidget]=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
 
         self.setResizeAnchor(QGraphicsView.NoAnchor)
@@ -233,7 +239,7 @@ class ScalableGraphicsView(QGraphicsView):
         self._mouse_position = event.pos()
         degrees = event.delta() / 8
         number_of_steps = degrees / 15
-        
+
         self._scheduled_scalings += number_of_steps
         if self._scheduled_scalings * number_of_steps < 0:
             self._scheduled_scalings = number_of_steps
@@ -254,12 +260,14 @@ class ScalableGraphicsView(QGraphicsView):
             delta = self.mapToScene(self._mouse_position) - old
             self.translate(delta.x(), delta.y())
 
+
 class UserControlledGraphicsView(CursorTrackedScrollGraphicsView,
                                  ScalableGraphicsView,
                                  RubberSelectableGraphicsView): pass
 
+
 class OpenGLGraphicsView(QGraphicsView):
-    def __init__(self, parent: Optional[QWidget]=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         format_ = QSurfaceFormat()
         format_.setDepthBufferSize(24)
@@ -272,12 +280,14 @@ class OpenGLGraphicsView(QGraphicsView):
         self.setViewport(ogl_widget)
         self.setViewportUpdateMode(UserControlledGraphicsView.FullViewportUpdate)
 
-# QGLWidget помечен как устаревший но QOpenGLWidget тормозит на этой версии Qt
+
+# QGLWidget помечен как устаревший, но QOpenGLWidget тормозит на этой версии Qt
 class OGLGraphicsView(QGraphicsView):
-    def __init__(self, parent: Optional[QWidget]=None):
+    def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.setViewport(QGLWidget(QGLFormat(QGL.SampleBuffers)))
         self.setViewportUpdateMode(UserControlledGraphicsView.FullViewportUpdate)
+
 
 class GameGraphicsView(OGLGraphicsView, UserControlledGraphicsView):
     pass

@@ -5,6 +5,7 @@ import models
 import views
 from core import Coordinate
 
+
 class Unit:
     def __init__(self, model: models.Unit):
         self._command_chain = commands.Chain()
@@ -14,10 +15,10 @@ class Unit:
     def set_view(self, view: views.Unit):
         self.view = view
 
-    def move(self, position: Coordinate, interrupt: bool=True):
+    def move(self, position: Coordinate, interrupt: bool = True):
         self._execute_commands([commands.UnitMove(self.model, position, self.view.animation_ended)], interrupt)
 
-    def _execute_commands(self, command_list: Iterable, interrupt_next_commands: bool=True):
+    def _execute_commands(self, command_list: Iterable, interrupt_next_commands: bool = True):
         if self._command_chain.is_running() and interrupt_next_commands:
             self._command_chain.interrupt()
         else:
@@ -27,6 +28,7 @@ class Unit:
 
         if not self._command_chain.is_running():
             self._command_chain.execute()
+
 
 class Field:
     def __init__(self, model: models.Field):

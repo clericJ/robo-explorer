@@ -7,5 +7,4 @@ class Material:
     resource: str
     strength: int
 
-
 # limestone, basalt, aluminum, iron, titan

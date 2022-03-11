@@ -9,6 +9,7 @@ import config
 import surfaces
 from core import Coordinate, Directions, Event, Container
 
+
 class HavingPosition(ABC):
     @property
     @abstractmethod
@@ -25,6 +26,7 @@ class HavingPosition(ABC):
     def y(self) -> int:
         pass
 
+
 class Speed(Enum):
     slow = 1
     medium = 2
@@ -36,11 +38,12 @@ class Speed(Enum):
     def speed_up(self):
         return Speed.fast if self == Speed.medium else Speed.medium if self == Speed.slow else Speed.fast
 
+
 class Unit(HavingPosition):
     moved: Event = None  # (destination: Directions)
     turned: Event = None  # (from: Directions, to: Directions)
-    route_calculated = None # (start: Coordinate, finish: Coordinate, route: Iterable[Directions])
-    path_completed = None # ()
+    route_calculated = None  # (start: Coordinate, finish: Coordinate, route: Iterable[Directions])
+    path_completed = None  # ()
 
     def __init__(self, name: str, field: Field, position: Coordinate,
                  speed: Speed = Speed.medium, direction: Directions = Directions.east):
@@ -190,10 +193,11 @@ class Unit(HavingPosition):
 
         return result[1:]
 
+
 class Structure:
 
     def __init__(self, name: str, place: List[Coordinate],
-                 passable: bool, direction: Directions=Directions.east):
+                 passable: bool, direction: Directions = Directions.east):
 
         self._start_pos: Optional[Coordinate] = None
         self._direction = direction
@@ -247,9 +251,10 @@ class Structure:
 
         return None
 
+
 class Item:
 
-    def __init__(self, name: str, quantity: int=1):
+    def __init__(self, name: str, quantity: int = 1):
         self._quantity = quantity
         self._name = name
 
@@ -260,6 +265,7 @@ class Item:
     @property
     def quantity(self) -> int:
         return self._quantity
+
 
 class Cell(HavingPosition):
 
@@ -302,6 +308,7 @@ class Cell(HavingPosition):
 
     def __repr__(self):
         return f'Cell({self.surface.resource})'
+
 
 class Field:
     def __init__(self, width: int, height: int):

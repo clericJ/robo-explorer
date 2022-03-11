@@ -5,6 +5,7 @@ from typing import Any, Hashable, Optional, Callable, List, Generic, TypeVar
 
 from PySide2.QtCore import QObject, Signal
 
+
 class Coordinate:
     __slots__ = ('_x', '_y')
 
@@ -41,6 +42,7 @@ class Coordinate:
     def __repr__(self):
         return f'Coordinate({self.x}, {self.y})'
 
+
 class Directions(Enum):
     north = Coordinate(0, -1)
     south = Coordinate(0, 1)
@@ -49,6 +51,7 @@ class Directions(Enum):
 
     def __repr__(self):
         return self.name
+
 
 class UnitState(Enum):
     # (id, requires_prev_direction flag)
@@ -62,6 +65,7 @@ class UnitState(Enum):
 
     def __repr__(self):
         return self.name
+
 
 class Event:
     def __init__(self):
@@ -83,8 +87,9 @@ class Event:
         for listener in self._listeners:
             listener(*args)
 
+
 class StateMachine:
-    switched = None # (previous: Any, next: Any)
+    switched = None  # (previous: Any, next: Any)
 
     def __init__(self):
         self.switched = Event()
@@ -113,8 +118,9 @@ class StateMachine:
     def state(self) -> Optional[Hashable]:
         return self._current
 
+
 class AutoDisconnector(QObject):
-    def __init__(self, finished: Signal, before: Callable, parent: Optional[QObject]=None):
+    def __init__(self, finished: Signal, before: Callable, parent: Optional[QObject] = None):
         super().__init__(parent)
         self._before = before
         self._finished_signal = finished
@@ -124,10 +130,13 @@ class AutoDisconnector(QObject):
         self._before()
         self._finished_signal.disconnect(self.final)
 
+
 T = TypeVar('T')
+
+
 class Container(Generic[T]):
-    placed = None # T
-    removed = None # T
+    placed = None  # T
+    removed = None  # T
 
     def __init__(self):
         self._item: Optional[T] = None

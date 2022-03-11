@@ -13,10 +13,11 @@ import resources as rc
 from core import Directions, UnitState, AutoDisconnector, Coordinate, Event
 from graphics import Tile, AnimatedSprite
 
+
 class Unit(AnimatedSprite):
     animation_ended = None
 
-    def __init__(self, model: models.Unit, resource: str, controller, size, parent: Optional[QGraphicsItem]=None):
+    def __init__(self, model: models.Unit, resource: str, controller, size, parent: Optional[QGraphicsItem] = None):
         super().__init__(parent)
         self.setFlag(Unit.ItemIsSelectable)
 
@@ -88,8 +89,8 @@ class Unit(AnimatedSprite):
         path = QPainterPath()
         path.addEllipse(generate_half_size_rect(start_point))
 
-        prev_point = QPointF(start_point.x() + self._sprite_size/2,
-                             start_point.y() + self._sprite_size/2)
+        prev_point = QPointF(start_point.x() + self._sprite_size / 2,
+                             start_point.y() + self._sprite_size / 2)
         for step in route:
             next_point = QPointF(prev_point.x() + step.value.x * self._sprite_size,
                                  prev_point.y() + step.value.y * self._sprite_size)
@@ -104,7 +105,7 @@ class Unit(AnimatedSprite):
     def boundingRect(self) -> QRectF:
         return QRectF(0, 0, self._sprite_size, self._sprite_size)
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget] = None):
         self.overlays.draw(painter, overlays.PaintOrder.prev)
         super().paint(painter, option, widget)
         self.overlays.draw(painter, overlays.PaintOrder.post)
@@ -127,9 +128,9 @@ class Unit(AnimatedSprite):
         self.animations.switch((UnitState.stand, None, self.model.direction))
         self.clear_path()
 
-class Cell(Tile):
-    def __init__(self, model: models.Cell, size: int, parent: Optional[QGraphicsItem]=None):
 
+class Cell(Tile):
+    def __init__(self, model: models.Cell, size: int, parent: Optional[QGraphicsItem] = None):
         filename = config.SURFACE_NAME_TEMPLATE.format(model.surface.resource, model.surface.id)
         tile = QPixmap(rc.get_tile(filename)).scaledToHeight(size, mode=Qt.SmoothTransformation)
         super().__init__(tile, size, parent)
@@ -147,7 +148,7 @@ class Cell(Tile):
         self.overlays.remove_by_type(overlays.Backlight)
         super().hoverEnterEvent(event)
 
-    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget]=None):
+    def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Optional[QWidget] = None):
         self.overlays.draw(painter, overlays.PaintOrder.prev)
         super().paint(painter, option, widget)
         self.overlays.draw(painter, overlays.PaintOrder.post)
@@ -155,12 +156,13 @@ class Cell(Tile):
     def __repr__(self) -> str:
         return f'views.Cell({self.model.surface.name})'
 
+
 class Field(QGraphicsScene):
     cell_activated = Signal(Cell)
     units_selected = Signal(list)
     selection_cleared = Signal()
 
-    def __init__(self, model: models.Field, controller, elements_size: int, parent: Optional[QObject]=None):
+    def __init__(self, model: models.Field, controller, elements_size: int, parent: Optional[QObject] = None):
         super().__init__(parent)
         self.setBackgroundBrush(QBrush(rc.FIELD_BACKGROUND_COLOR))
 

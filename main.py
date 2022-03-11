@@ -5,6 +5,7 @@ import models, controllers, graphics, views
 import config
 from core import Coordinate
 
+
 def main(argv):
     app = QApplication(argv)
     field_model = models.Field(10, 10)
@@ -24,9 +25,10 @@ def main(argv):
     field_controller.add_unit(red17, 'red17')
     field_controller.add_unit(red17_2, 'red17')
 
-    #main_view.showFullScreen()
+    # main_view.showFullScreen()
     main_view.show()
     return app.exec_()
+
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))

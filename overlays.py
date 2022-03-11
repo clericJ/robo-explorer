@@ -11,21 +11,25 @@ from core import Directions
 
 IMMORTAL = -1
 
-# TODO: возможно переписать оверлеи, относледовав их от QGraphicsEffect
+
+# TODO: возможно переписать оверлеи, отнаследовав их от QGraphicsEffect
 
 class PaintOrder(Enum):
     prev = 0
     post = 1
+
 
 class Names(Enum):
     cursor_selected = 0
     cursor_move = 1
     cursor_target = 2
 
+
 @dataclass
 class PathDirections:
     from_: Optional[Directions]
     to: Optional[Directions]
+
 
 class Overlay(ABC):
 
@@ -57,8 +61,9 @@ class Overlay(ABC):
         return self._lifetime == IMMORTAL
 
     @abstractmethod
-    def draw(self, painter: QPainter, x: int=0, y: int=0) -> bool:
+    def draw(self, painter: QPainter, x: int = 0, y: int = 0) -> bool:
         pass
+
 
 class Backlight(Overlay):
     def __init__(self, color: QColor, rect: QRectF, order: PaintOrder, lifetime=IMMORTAL):
@@ -69,7 +74,7 @@ class Backlight(Overlay):
     def id(self):
         return id(self)
 
-    def draw(self, painter: QPainter, x: int=0, y: int=0) -> bool:
+    def draw(self, painter: QPainter, x: int = 0, y: int = 0) -> bool:
         result = False
 
         if self._lifetime == IMMORTAL or self._lifetime > 0:
@@ -83,6 +88,7 @@ class Backlight(Overlay):
                 self._lifetime -= 1
 
         return result
+
 
 class Path(Overlay):
     def __init__(self, path: PathDirections, size: QSize, order: PaintOrder, lifetime=IMMORTAL):
@@ -105,7 +111,7 @@ class Path(Overlay):
             raise ValueError('PathDirections empty')
         return result
 
-    def draw(self, painter: QPainter, x: int=0, y: int=0) -> bool:
+    def draw(self, painter: QPainter, x: int = 0, y: int = 0) -> bool:
         result = False
 
         if self._lifetime == IMMORTAL or self._lifetime > 0:
@@ -120,9 +126,9 @@ class Path(Overlay):
     def _paint_path(self):
         width, height = self._size.width(), self._size.height()
         lines = {Directions.north: QLineF(width / 2, 0, width / 2, height / 2),
-                 Directions.south: QLineF(width/2, height, width/2, height/2),
-                 Directions.east: QLineF(width, height/2, width/2, height/2),
-                 Directions.west: QLineF(0, height/2, width/2, height/2)}
+                 Directions.south: QLineF(width / 2, height, width / 2, height / 2),
+                 Directions.east: QLineF(width, height / 2, width / 2, height / 2),
+                 Directions.west: QLineF(0, height / 2, width / 2, height / 2)}
 
         painter = QPainter()
         painter.begin(self._picture)
@@ -141,6 +147,7 @@ class Path(Overlay):
             width, height = self._size.width(), self._size.height()
             painter.drawEllipse(width // 4, height // 4, width // 2, height // 2)
         painter.end()
+
 
 # class Cursor(QGraphicsEffect):
 #
@@ -191,7 +198,7 @@ class Pixmap(Overlay):
         self._name = resource
 
         self._sprite = QPixmap(rc.get_overlay(
-            resource.name)).scaled(size.width(),size.height(), mode=Qt.SmoothTransformation)
+            resource.name)).scaled(size.width(), size.height(), mode=Qt.SmoothTransformation)
 
     @property
     def id(self) -> Hashable:
@@ -213,6 +220,7 @@ class Pixmap(Overlay):
 
         return result
 
+
 class Map:
     def __init__(self):
         self._overlays: Dict[Tuple[Hashable, PaintOrder], Overlay] = {}
@@ -233,7 +241,7 @@ class Map:
                 exist.lifetime = overlay.lifetime
         return key
 
-    def get(self, overlay_id: Hashable, order: Optional[PaintOrder]=None) -> Optional[Overlay]:
+    def get(self, overlay_id: Hashable, order: Optional[PaintOrder] = None) -> Optional[Overlay]:
         result = None
         if order:
             result = self._overlays.get((overlay_id, order))
@@ -245,7 +253,7 @@ class Map:
         return result
 
     def remove(self, overlay: Overlay) -> bool:
-        if overlay and(overlay.id, overlay.order) in self._overlays:
+        if overlay and (overlay.id, overlay.order) in self._overlays:
             del self._overlays[(overlay.id, overlay.order)]
             return True
         return False
@@ -269,5 +277,5 @@ class Map:
                 to_draw.append(overlay)
 
         for overlay in to_draw:
-             if not overlay.draw(painter):
-                 self.remove(overlay)
+            if not overlay.draw(painter):
+                self.remove(overlay)
